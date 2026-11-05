@@ -429,3 +429,201 @@ def test_exceptions_hierarchy():
     assert issubclass(KillSwitchActiveError, HiveError)
     assert issubclass(LLMError, HiveError)
     assert issubclass(LLMTimeoutError, LLMError)
+
+# ============================================================================
+# LIVE TREND RESEARCH TESTS
+# ============================================================================
+from app.schemas.trend import LiveTrendItem, AnalyzedTrendOpportunity, NicheTrendDigest
+from app.services.trend_research import LiveTrendResearchService
+
+def test_live_trend_item_schema():
+    item = LiveTrendItem(
+        id="hn-12345",
+        title="Cursor AI Code Editor adoption surge",
+        source="hackernews",
+        url="https://news.ycombinator.com/item?id=12345",
+        niche="tech",
+        score=450,
+        comment_count=120,
+        summary="Discussion on autonomous AI IDEs."
+    )
+    assert item.id == "hn-12345"
+    assert item.source == "hackernews"
+    assert item.score == 450
+
+def test_trend_research_service_fallback_generation():
+    service = LiveTrendResearchService()
+    test_trends = [
+        LiveTrendItem(
+            id="t-1",
+            title="Local Llama 3.1 8B vs Cloud APIs",
+            source="reddit",
+            niche="tech",
+            score=500,
+            comment_count=80
+        ),
+        LiveTrendItem(
+            id="t-2",
+            title="Anthropic Computer Use API announcement",
+            source="hackernews",
+            niche="tech",
+            score=900,
+            comment_count=300
+        )
+    ]
+    opps = service.generate_fallback_opportunities("tech", test_trends)
+    assert len(opps) == 2
+    assert opps[0].source_trend_id == "t-1"
+    assert "hook_angle" in opps[0].model_dump()
+    assert opps[0].virality_score >= 80
+
+def test_trend_digest_structure():
+    digest = NicheTrendDigest(
+        worker_id="tech",
+        niche="AI and technology",
+        timestamp="2026-11-05T00:00:00Z",
+        total_signals=2,
+        trends=[],
+        opportunities=[]
+    )
+    assert digest.worker_id == "tech"
+    assert digest.total_signals == 2
+
+# ============================================================================
+# VIDEO INTELLIGENCE ENGINE TESTS
+# ============================================================================
+from app.schemas.video import (
+    VideoProductionBlueprint,
+    SceneNode,
+    VisualDirective,
+    AudioDirective,
+    EmotionalBeat,
+    RetentionZone,
+    HookVariant,
+)
+from app.services.video_engine import (
+    video_engine,
+    BRAND_IDENTITIES,
+    build_scene_graph_template,
+    generate_hook_variants,
+    score_virality,
+)
+
+def test_brand_identities_registry():
+    assert "tech" in BRAND_IDENTITIES
+    assert "business" in BRAND_IDENTITIES
+    assert "entertainment" in BRAND_IDENTITIES
+    assert "education" in BRAND_IDENTITIES
+    assert "lifestyle" in BRAND_IDENTITIES
+    assert BRAND_IDENTITIES["tech"].brand_name == "Signal Tech"
+    assert BRAND_IDENTITIES["tech"].colors.primary == "#00d4ff"
+    assert BRAND_IDENTITIES["business"].colors.primary == "#f5a623"
+
+def test_build_scene_graph_retention_zones():
+    scenes = build_scene_graph_template(
+        title="Cursor vs Devin AI Battle",
+        hook_text="Stop coding like it is 2023.",
+        body_points=["Point 1: Autocomplete speed", "Point 2: Architecture planning"],
+        cta_text="Follow for more dev tool teardowns."
+    )
+    # Must have hook, tension, core, payoff, cta
+    assert len(scenes) >= 5
+    assert scenes[0].emotional_beat == EmotionalBeat.hook
+    assert scenes[0].retention_zone == RetentionZone.critical
+    assert scenes[0].duration_seconds <= 3.0
+    assert scenes[-1].emotional_beat == EmotionalBeat.cta
+
+def test_generate_hook_variants():
+    variants = generate_hook_variants(
+        title="Open-Source Local LLMs",
+        audience="Developers and AI builders"
+    )
+    assert len(variants) == 3
+    archetypes = {v.hook_archetype for v in variants}
+    assert "contrarian" in archetypes
+    assert "curiosity_gap" in archetypes
+    assert "stat_paradox" in archetypes
+
+def test_video_engine_assemble_blueprint():
+    blueprint = video_engine.assemble_blueprint(
+        worker_id="tech",
+        trend_title="Llama 3.1 405B Outperforms Frontier Models Locally",
+        hook_text="Stop coding like it is 2023.",
+        body_points=[
+            "First benchmark shows 90% parity with cloud models.",
+            "Local inference on Mac Studio M2 Ultra runs at 32 tok/s.",
+            "Zero cloud token costs makes autonomous loops viable.",
+        ],
+        cta_text="Follow for more dev tool teardowns.",
+        description="Developer community benchmarks show huge local parity.",
+        source_trend_id="trend-001",
+    )
+    assert isinstance(blueprint, VideoProductionBlueprint)
+    assert blueprint.worker_id == "tech"
+    assert blueprint.brand.brand_name == "Signal Tech"
+    assert len(blueprint.scenes) >= 5
+    assert blueprint.virality_score is not None
+    assert blueprint.virality_score.overall_score > 50
+    assert len(blueprint.hook_variants) == 3
+    assert blueprint.thumbnail.headline_text != ""
+
+# ============================================================================
+# MASTER AGENT EXECUTIVE BRIEFING TESTS
+# ============================================================================
+from app.schemas.briefing import MasterExecutiveBriefing, WorkerPerformanceDigest
+from app.services.master_briefing import MasterBriefingService
+
+def test_master_briefing_structure():
+    service = MasterBriefingService()
+    briefing = service.get_latest_briefing()
+    assert isinstance(briefing, MasterExecutiveBriefing)
+    assert briefing.network_reach_24h > 100000
+    assert briefing.network_retention_avg_pct > 0.0
+    assert len(briefing.worker_directives) == 5
+    assert len(briefing.viral_winners) >= 1
+    assert any(w.worker_id == "tech" for w in briefing.viral_winners)
+    assert any(w.status_signal == "hook_fatigue" for w in briefing.underperformers)
+    assert "Good morning, Operator" in briefing.executive_summary
+
+def test_master_briefing_approve_and_dispatch():
+    service = MasterBriefingService()
+    briefing = service.approve_and_dispatch()
+    assert briefing.status == "executing"
+
+# ============================================================================
+# VIDEO RENDERING PIPELINE TESTS
+# ============================================================================
+import os
+from app.services.video_renderer import VideoRenderService, get_ffmpeg_binary
+
+def test_video_renderer_initialization_and_binary():
+    renderer = VideoRenderService()
+    assert os.path.exists(renderer.video_dir)
+    assert os.path.exists(renderer.image_dir)
+    bin_path = get_ffmpeg_binary()
+    assert bin_path != ""
+
+def test_video_renderer_render_blueprint():
+    renderer = VideoRenderService()
+    bp = video_engine.assemble_blueprint(
+        worker_id="tech",
+        trend_title="Autonomous Video Pipeline Test",
+        hook_text="Stop coding by hand.",
+        body_points=["Scene 1: Neural voice active.", "Scene 2: High definition output."],
+        cta_text="Follow for more.",
+        description="Automated rendering test.",
+    )
+    job = renderer.render_blueprint(bp)
+    assert job.status == "complete"
+    assert job.progress_pct == 100.0
+    assert job.output_path is not None
+    assert job.output_path.endswith(".mp4")
+    # Verify the physical video file actually exists on disk!
+    disk_path = os.path.join(renderer.video_dir, f"{bp.blueprint_id}.mp4")
+    assert os.path.exists(disk_path)
+    assert os.path.getsize(disk_path) > 1000
+
+
+
+
+

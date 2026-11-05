@@ -13,6 +13,7 @@ import RevenuePage from "@/pages/revenue";
 import IntegrationsPage from "@/pages/integrations";
 import SystemHealthPage from "@/pages/system-health";
 import SettingsPage from "@/pages/settings";
+import VideoStudioPage from "@/pages/video-studio";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="workers" element={<WorkersPage />} />
             <Route path="workers/:id" element={<WorkerDetailsPage />} />
             <Route path="content-studio" element={<ContentStudioPage />} />
+            <Route path="video-studio" element={<VideoStudioPage />} />
             <Route path="approval-queue" element={<ApprovalQueuePage />} />
             <Route path="publishing" element={<PublishingPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />

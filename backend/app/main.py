@@ -1,6 +1,8 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.api.routes import router
 from app.config import get_settings
 from app.core.logging import setup_logging
@@ -27,3 +29,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+
+# Mount local media storage for direct browser video and thumbnail playback
+storage_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "storage"))
+if not os.path.exists(storage_dir):
+    storage_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storage"))
+if not os.path.exists(storage_dir) and os.path.exists("/app/storage"):
+    storage_dir = "/app/storage"
+if os.path.exists(storage_dir):
+    app.mount("/storage", StaticFiles(directory=storage_dir), name="storage")
+    app.mount("/api/storage", StaticFiles(directory=storage_dir), name="api_storage")
+

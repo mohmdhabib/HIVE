@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type TopicOpportunity, type MultiFormatDeliverable } from "@/lib/api";
+import { api, type TopicOpportunity, type MultiFormatDeliverable, type LiveTrendItem } from "@/lib/api";
 import { useWorkers } from "@/hooks/use-workers";
 import { useAppStore } from "@/stores/app-store";
 import {
@@ -8,11 +9,14 @@ import {
   Brain,
   CheckCircle2,
   CircleDollarSign,
+  Clapperboard,
   Compass,
   Copy,
+  ExternalLink,
   Eye,
   FileText,
   Flame,
+  Globe,
   Image as ImageIcon,
   Layers,
   MessageSquare,
@@ -22,15 +26,18 @@ import {
   Send,
   Share2,
   Sparkles,
+  TrendingUp,
   Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function ContentStudioPage() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: workers = [] } = useWorkers();
-  const { selectedWorkerId, setSelectedWorker } = useAppStore();
+  const { selectedWorkerId, setSelectedWorker, setPreloadedTrend } = useAppStore();
 
+  const [researchMode, setResearchMode] = useState<"live_signals" | "brainstorm">("live_signals");
   const [keyword, setKeyword] = useState("");
   const [selectedTopic, setSelectedTopic] = useState<TopicOpportunity | null>(null);
   const [deliverable, setDeliverable] = useState<MultiFormatDeliverable | null>(null);
@@ -39,7 +46,39 @@ export default function ContentStudioPage() {
 
   const activeWorker = workers.find((w) => w.id === selectedWorkerId) || workers[0];
 
-  // Topic Research Mutation
+  // Live Trends Query (HackerNews, Reddit, Google Trends)
+  const {
+    data: liveTrends = [],
+    isLoading: isLoadingTrends,
+    refetch: refetchTrends,
+  } = useQuery({
+    queryKey: ["live-trends", selectedWorkerId],
+    queryFn: () => api.liveTrends(selectedWorkerId || "tech", 8),
+  });
+
+  // AI Trend Analysis Mutation
+  const analyzeTrendsMutation = useMutation({
+    mutationFn: () =>
+      api.analyzeTrends({
+        worker_id: selectedWorkerId || "tech",
+      }),
+    onSuccess: (digest) => {
+      // Map analyzed opportunities to TopicOpportunity format for the pipeline
+      const mapped: TopicOpportunity[] = digest.opportunities.map((opp) => ({
+        title: opp.headline,
+        hook_angle: opp.hook_angle,
+        timeliness_factor: `Live signal with virality score ${opp.virality_score}/100 [Archetype: ${opp.hook_archetype}]`,
+        target_audience_segment: opp.audience_appeal,
+        estimated_reach_potential: opp.virality_score >= 85 ? "viral" : "high",
+        monetization_angle: opp.monetization_hypothesis,
+      }));
+      if (mapped.length > 0) {
+        setSelectedTopic(mapped[0]);
+      }
+    },
+  });
+
+  // Topic Research Mutation (Synthetic / Parametric Ideation)
   const researchMutation = useMutation({
     mutationFn: () =>
       api.researchTopics({
@@ -130,82 +169,225 @@ export default function ContentStudioPage() {
         </div>
       </div>
 
-      {/* Stage 1: Topic Discovery & Research */}
+      {/* Stage 1: Topic Discovery & Live Trend Ingestion */}
       <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center gap-2">
-            <Search size={16} className="text-hive" />
+            <Radio size={16} className="text-hive animate-pulse" />
             <h2 className="font-display text-base font-semibold">
-              1. Automated Topic Discovery & Trend Research
+              1. Topic Discovery & Live Trend Ingestion
             </h2>
           </div>
-          <span className="font-mono text-[9px] text-gray-400">
-            Targeting: {activeWorker?.audience || "Curious audience"}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Filter by keyword (e.g. AI benchmarks, unit economics, daily habits) or leave empty for timely trends..."
-              className="w-full rounded-lg border border-border bg-surface-deep px-3.5 py-2.5 text-xs text-gray-200 outline-none focus:border-hive/50"
-            />
+          <div className="flex items-center gap-1 rounded bg-surface-deep p-1 text-[10px] font-mono">
+            <button
+              onClick={() => setResearchMode("live_signals")}
+              className={cn(
+                "rounded px-2.5 py-1 transition-colors",
+                researchMode === "live_signals"
+                  ? "bg-hive font-semibold text-[#090b10]"
+                  : "text-gray-400 hover:text-gray-200"
+              )}
+            >
+              LIVE WEB SIGNALS
+            </button>
+            <button
+              onClick={() => setResearchMode("brainstorm")}
+              className={cn(
+                "rounded px-2.5 py-1 transition-colors",
+                researchMode === "brainstorm"
+                  ? "bg-hive font-semibold text-[#090b10]"
+                  : "text-gray-400 hover:text-gray-200"
+              )}
+            >
+              KEYWORD BRAINSTORM
+            </button>
           </div>
-          <button
-            onClick={() => researchMutation.mutate()}
-            disabled={researchMutation.isPending}
-            className="flex items-center gap-1.5 rounded-lg bg-hive px-4 py-2.5 font-mono text-xs font-semibold text-[#090b10] hover:bg-hive-400 transition-colors disabled:opacity-50"
-          >
-            <Compass size={14} />
-            {researchMutation.isPending ? "SCANNING SIGNALS…" : "DISCOVER TOPICS"}
-          </button>
         </div>
 
-        {/* Discovered Opportunities Grid */}
-        {topics.length > 0 && (
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {topics.map((t, idx) => {
-              const isSelected = selectedTopic?.title === t.title;
-              return (
-                <div
-                  key={idx}
-                  onClick={() => setSelectedTopic(t)}
-                  className={cn(
-                    "cursor-pointer rounded-lg border p-4 flex flex-col justify-between transition-colors",
-                    isSelected
-                      ? "border-hive bg-hive/5 shadow-[0_0_15px_rgba(245,166,35,0.08)]"
-                      : "border-border bg-surface-deep hover:border-border-strong"
-                  )}
+        {researchMode === "live_signals" ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                Real-time external trends ingested from Reddit, HackerNews, and Google Trends for{" "}
+                <b className="text-gray-200 uppercase font-mono">{activeWorker?.name}</b>.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => refetchTrends()}
+                  disabled={isLoadingTrends}
+                  className="rounded border border-border bg-surface-deep px-3 py-1.5 font-mono text-[10px] text-gray-300 hover:bg-surface hover:text-gray-100 transition-colors"
                 >
-                  <div>
-                    <div className="flex items-center justify-between text-[9px] font-mono mb-2">
-                      <span className="rounded bg-surface px-1.5 py-0.5 uppercase border border-border text-gray-400">
-                        {t.estimated_reach_potential} Reach
-                      </span>
-                      {isSelected && <span className="text-hive font-bold">SELECTED</span>}
+                  {isLoadingTrends ? "FETCHING..." : "REFRESH SIGNALS"}
+                </button>
+                <button
+                  onClick={() => analyzeTrendsMutation.mutate()}
+                  disabled={analyzeTrendsMutation.isPending}
+                  className="flex items-center gap-1.5 rounded bg-hive px-3 py-1.5 font-mono text-[10px] font-semibold text-[#090b10] hover:bg-hive-400 transition-colors disabled:opacity-50"
+                >
+                  <Sparkles size={12} />
+                  {analyzeTrendsMutation.isPending ? "EXTRACTING HOOKS…" : "EXTRACT VIRAL HOOKS"}
+                </button>
+              </div>
+            </div>
+
+            {/* Live Trend Stream Cards */}
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              {liveTrends.map((trend: LiveTrendItem) => {
+                const isSelected = selectedTopic?.title === trend.title;
+                return (
+                  <div
+                    key={trend.id}
+                    onClick={() => {
+                      setSelectedTopic({
+                        title: trend.title,
+                        hook_angle: `Most people are ignoring ${trend.title.slice(0, 35)}... Here is why that is a massive mistake.`,
+                        timeliness_factor: `Live signal with ${trend.score} upvotes/traffic on ${trend.source}`,
+                        target_audience_segment: activeWorker?.audience || "Curious audience",
+                        estimated_reach_potential: trend.score > 1000 ? "viral" : "high",
+                        monetization_angle: `Affiliate & sponsor integration tailored to ${activeWorker?.niche}`,
+                      });
+                    }}
+                    className={cn(
+                      "cursor-pointer rounded-lg border p-3.5 flex flex-col justify-between transition-all",
+                      isSelected
+                        ? "border-hive bg-hive/5 shadow-[0_0_15px_rgba(245,166,35,0.12)]"
+                        : "border-border bg-surface-deep hover:border-border-strong hover:bg-surface"
+                    )}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between text-[9px] font-mono mb-2">
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 uppercase font-bold",
+                            trend.source === "hackernews" && "bg-orange-500/20 text-orange-400 border border-orange-500/30",
+                            trend.source === "reddit" && "bg-red-500/20 text-red-400 border border-red-500/30",
+                            trend.source === "google_trends" && "bg-blue-500/20 text-blue-400 border border-blue-500/30",
+                            trend.source === "simulated" && "bg-gray-500/20 text-gray-400 border border-border"
+                          )}
+                        >
+                          {trend.source.replace("_", " ")}
+                        </span>
+                        <span className="text-gray-400 font-mono">
+                          {trend.score > 0 ? `${trend.score.toLocaleString()} pts` : "Active"}
+                        </span>
+                      </div>
+
+                      <h3 className="font-display text-xs font-semibold text-gray-100 line-clamp-3">
+                        {trend.title}
+                      </h3>
+                      {trend.summary && (
+                        <p className="mt-1.5 text-[11px] text-gray-400 line-clamp-2">
+                          {trend.summary}
+                        </p>
+                      )}
                     </div>
-                    <h3 className="font-display text-sm font-semibold text-gray-100">{t.title}</h3>
-                    <p className="mt-2 text-xs text-gray-400 italic">"{t.hook_angle}"</p>
-                    <div className="mt-3 text-[11px] text-gray-400 space-y-1">
-                      <div>
-                        <span className="font-mono text-[9px] text-gray-500 block">TIMELINESS</span>
-                        {t.timeliness_factor}
+
+                    <div className="mt-3 flex items-center justify-between border-t border-border pt-2.5 text-[10px] font-mono">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreloadedTrend({
+                            title: trend.title,
+                            summary: trend.summary || undefined,
+                          });
+                          navigate("/video-studio");
+                        }}
+                        className="flex items-center gap-1 rounded bg-hive/10 px-2 py-0.5 text-[9px] font-mono text-hive hover:bg-hive/20 border border-hive/30 transition-colors"
+                        title="Open in 9:16 Video Production Engine"
+                      >
+                        <Clapperboard size={11} />
+                        VIDEO ENGINE
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400 flex items-center gap-1 text-[9px]">
+                          <Flame size={11} className={isSelected ? "text-hive" : "text-gray-500"} />
+                          {isSelected ? "ACTIVE" : "SELECT"}
+                        </span>
+                        {trend.url && (
+                          <a
+                            href={trend.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-gray-500 hover:text-gray-300"
+                          >
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder="Filter by keyword (e.g. AI benchmarks, unit economics, daily habits) or leave empty for timely trends..."
+                  className="w-full rounded-lg border border-border bg-surface-deep px-3.5 py-2.5 text-xs text-gray-200 outline-none focus:border-hive/50"
+                />
+              </div>
+              <button
+                onClick={() => researchMutation.mutate()}
+                disabled={researchMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg bg-hive px-4 py-2.5 font-mono text-xs font-semibold text-[#090b10] hover:bg-hive-400 transition-colors disabled:opacity-50"
+              >
+                <Compass size={14} />
+                {researchMutation.isPending ? "SCANNING SIGNALS…" : "DISCOVER TOPICS"}
+              </button>
+            </div>
 
-                  <div className="mt-4 border-t border-border pt-3">
-                    <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
-                      <CircleDollarSign size={12} />
-                      {t.monetization_angle}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+            {/* Discovered Opportunities Grid */}
+            {topics.length > 0 && (
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {topics.map((t, idx) => {
+                  const isSelected = selectedTopic?.title === t.title;
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedTopic(t)}
+                      className={cn(
+                        "cursor-pointer rounded-lg border p-4 flex flex-col justify-between transition-colors",
+                        isSelected
+                          ? "border-hive bg-hive/5 shadow-[0_0_15px_rgba(245,166,35,0.08)]"
+                          : "border-border bg-surface-deep hover:border-border-strong"
+                      )}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between text-[9px] font-mono mb-2">
+                          <span className="rounded bg-surface px-1.5 py-0.5 uppercase border border-border text-gray-400">
+                            {t.estimated_reach_potential} Reach
+                          </span>
+                          {isSelected && <span className="text-hive font-bold">SELECTED</span>}
+                        </div>
+                        <h3 className="font-display text-sm font-semibold text-gray-100">{t.title}</h3>
+                        <p className="mt-2 text-xs text-gray-400 italic">"{t.hook_angle}"</p>
+                        <div className="mt-3 text-[11px] text-gray-400 space-y-1">
+                          <div>
+                            <span className="font-mono text-[9px] text-gray-500 block">TIMELINESS</span>
+                            {t.timeliness_factor}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 border-t border-border pt-3">
+                        <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-400">
+                          <CircleDollarSign size={12} />
+                          {t.monetization_angle}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -222,14 +404,31 @@ export default function ContentStudioPage() {
                 {selectedTopic.title}
               </h2>
             </div>
-            <button
-              onClick={() => generateMutation.mutate(selectedTopic)}
-              disabled={generateMutation.isPending}
-              className="flex items-center gap-1.5 rounded-lg bg-hive px-4 py-2 font-mono text-xs font-semibold text-[#090b10] hover:bg-hive-400 transition-colors disabled:opacity-50"
-            >
-              <Layers size={14} />
-              {generateMutation.isPending ? "GENERATING PACKAGE…" : "GENERATE ALL FORMATS"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setPreloadedTrend({
+                    title: selectedTopic.title,
+                    summary: `${selectedTopic.hook_angle} | Timeliness: ${selectedTopic.timeliness_factor}`,
+                  });
+                  navigate("/video-studio");
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-hive/50 bg-hive/10 px-4 py-2 font-mono text-xs font-semibold text-hive hover:bg-hive/20 transition-colors"
+                title="Transfer topic to 9:16 Video Production Engine"
+              >
+                <Clapperboard size={14} />
+                SEND TO 9:16 VIDEO ENGINE
+              </button>
+
+              <button
+                onClick={() => generateMutation.mutate(selectedTopic)}
+                disabled={generateMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg bg-hive px-4 py-2 font-mono text-xs font-semibold text-[#090b10] hover:bg-hive-400 transition-colors disabled:opacity-50"
+              >
+                <Layers size={14} />
+                {generateMutation.isPending ? "GENERATING PACKAGE…" : "GENERATE ALL FORMATS"}
+              </button>
+            </div>
           </div>
 
           {deliverable && (

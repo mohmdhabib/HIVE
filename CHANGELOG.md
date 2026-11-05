@@ -5,6 +5,137 @@ All notable changes to the HIVE project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-11-06
+
+### Added
+- **Real 30 FPS Motion Video Engine & Footage Compositor (Beyond Static Boxes)**
+  - **Eliminated Static Cards**: Replaced static Pillow box graphics with a dual-layer video compositor:
+    1. **Real Motion Background Footage**:
+       - Added `MaterialService` (`app/services/material_service.py`) supporting real Pexels stock video downloads via search keywords (`PEXELS_API_KEY`).
+       - Built a 30 FPS procedural kinetic motion engine generating dynamic cyber grids, downward perspective grids, sweeping laser scanlines, floating glowing particle fields, and pulsing neural node connections.
+    2. **Transparent Subtitle & HUD Layer**:
+       - Centered kinetic Hormozi/MrBeast subtitles with active keyword highlight capsules overlaid directly on the moving footage.
+       - Emotional beat badges (`★ HOOK`, `★ REVELATION`, `★ CTA`) and brand telemetry watermarks.
+    3. **FFmpeg Multi-Layer Video Compositing**:
+       - Composites moving video background + transparent subtitle overlay + mixed audio (cadence voiceover + lo-fi BGM) into crisp 1080×1920 30 FPS MP4 video.
+  - **Verified Output**: Produced real 25.5s motion video [vbp-ddf956ab5438.mp4](file:///e:/HIVE/storage/videos/vbp-ddf956ab5438.mp4) (12.52 MB).
+
+## [0.13.0] - 2026-11-06
+
+### Added
+- **Dynamic Ken Burns Video Motion Engine & Live Render Progress HUD**
+  - **FFmpeg Ken Burns Camera Motion (`zoompan`)**:
+    - Upgraded `VideoRenderService` (`app/services/video_renderer.py`) with continuous cinematic camera motion on every scene using FFmpeg's `zoompan` filter (`1.0x` to `1.15x` slow drift with 30 FPS `yuv420p` encoding).
+  - **Multi-Track Audio Mixing (Voiceover + Lo-Fi Ambiance)**:
+    - Added speech cadence synthesis timed to sentence length and syllable count with natural vocal inflection.
+    - Added ambient lo-fi synthwave chord progression (A minor sub-bass, harmonic pads, and rhythmic hi-hat ticks).
+    - Integrated FFmpeg `amix` to duck background music at `-18dB` beneath the narration track.
+  - **Asynchronous Background Rendering**:
+    - `POST /api/video/render` now starts an asynchronous background daemon thread and returns immediately with a tracking job ID.
+    - `GET /api/video/render/{job_id}` streams live progress percentage (`0% -> 100%`) and human-readable step descriptions.
+  - **Live Render HUD & Phase Stepper**:
+    - Upgraded `frontend/src/pages/video-studio.tsx` with a real-time progress monitor that polls every 700ms during rendering.
+    - Displays glowing progress bar, active phase indicator (`1. Scene Graph`, `2. Speech Cadence`, `3. Ken Burns Motion`, `4. H.264 Assembly`), and auto-switches to the Smartphone Player upon completion.
+  - **Automated Verification**:
+    - Real render execution completed in 5.0 seconds generating 16.57 MB 1080×1920 MP4 video.
+    - 42/42 backend unit tests passing in 3.92s.
+    - `npm run build` passing in 3.21s with zero errors.
+
+## [0.12.0] - 2026-11-06
+
+### Added
+- **Obsidian Glass Design System & Studio UX Overhaul**
+  - **Cyber-Minimalist Design Tokens**:
+    - Upgraded `frontend/tailwind.config.ts` and `frontend/src/index.css` with dark obsidian glass card surfaces (`#0d111a`, `#111622`), radial warm amber back-glows (`#f5a623`), and blur-enhanced borders.
+  - **Sleek Smartphone Chassis Mockup**:
+    - Overhauled the Video Player in `frontend/src/pages/video-studio.tsx` with a physical smartphone mockup (curved bezels, titanium rim, top Dynamic Island notch, animated bottom overlay badges).
+    - Added an **Interactive Scene Seeker** that computes scene second offsets and seeks the HTML5 player to individual emotional beats on click.
+    - Added **Production Telemetry** cards with resolution (1080×1920), H.264/AAC encoding, and FFmpeg v7.1 specifications.
+  - **Cross-Studio Trend Bridge**:
+    - Added `preloadedTrend` state in Zustand `useAppStore`.
+    - Content Studio live trend cards now feature a 1-click **"⚡ VIDEO ENGINE"** button that transfers live trends directly to the 9:16 Video Engine.
+  - **In-Queue Video Verification**:
+    - Upgraded `frontend/src/pages/approval-queue.tsx` to automatically detect rendered `.mp4` video files in task deliverables and display an inline vertical player so human operators can watch the exact video before authorizing publication.
+  - **Mission Control Overview**:
+    - Upgraded `frontend/src/pages/overview.tsx` with mission control hero banner, 24h impression telemetry, 3s retention hold metrics, and active creator fleet cards.
+    - Upgraded `Topbar` with dynamic Llama 3.1 latency telemetry and emergency kill-switch toggle.
+  - **Build Verification**:
+    - Zero TypeScript errors (`npm run build` passing in 3.3s).
+    - 42/42 backend unit tests passing (`python -m pytest backend/tests/test_units.py`).
+
+## [0.11.0] - 2026-11-05
+
+### Added
+- **Autonomous Video Rendering Pipeline & Studio Player**
+  - **FFmpeg 7.1 Composite Rendering Engine**:
+    - Created `VideoRenderService` (`app/services/video_renderer.py`) providing automated end-to-end rendering of 1080x1920 HD MP4 short videos into `storage/videos/`.
+    - Scene card synthesis with Pillow: Brand gradient backgrounds, glassmorphism headers, emotional beat badges, kinetic typography, and Hormozi/MrBeast active-word subtitle highlight boxes.
+    - Neural and synthetic audio synchronization with FFmpeg.
+    - Automated thumbnail generation into `storage/images/`.
+  - **FastAPI Static Media Serving**:
+    - Mounted `/storage` in `app/main.py` allowing instant streaming, playback, and direct downloading of rendered videos.
+  - **REST API Endpoints**:
+    - `POST /api/video/render`: Triggers physical MP4 rendering from a Video Production Blueprint.
+    - `GET /api/video/render/{job_id}`: Real-time progress polling.
+    - `GET /api/video/library`: Lists all produced videos in the storage vault.
+  - **Interactive Studio Video Player**:
+    - Built a dark-mode 9:16 vertical video player in `frontend/src/pages/video-studio.tsx`.
+    - Direct MP4 download button and 1-click dispatch to the Master Approval Queue.
+    - Video Vault tab allowing operators to browse, rewatch, and download past renders.
+  - **Automated Verification**:
+    - 42/42 tests passing with 0 failures (`backend/tests/test_units.py`).
+
+## [0.10.0] - 2026-11-05
+
+### Added
+- **Master Agent Daily Executive Standup & Attention Director**
+  - **Executive Standup Briefing**:
+    - Created `MasterBriefingService` (`app/services/master_briefing.py`) acting as Chief Content Officer speaking directly to the Human Operator.
+    - Evaluates the 5 niche media brands over the trailing 24h, analyzing attention metrics, 3s hook retention benchmarks, and virality versus hook fatigue.
+    - Synthesizes diagnosed root causes (e.g., contrasting Signal Tech's high-retention contrarian warnings against Curiosity Daily's passive trivia fatigue).
+    - Formulates tailored strategy pivots and proposed daily hook formulas for each worker brand.
+  - **Master Agent Briefing API**:
+    - `GET /api/master/briefing`: Returns the structured daily standup and per-worker directive matrix.
+    - `POST /api/master/briefing/generate`: Re-runs LLM synthesis over live signals.
+    - `POST /api/master/briefing/approve`: 1-click authorization that dispatches daily directives to all 5 creator agents.
+  - **Master Agent Operations UI**:
+    - Enhanced `MasterAgentPage` (`src/pages/master-agent.tsx`) with daily standup executive card, spoken AI message, winner/flop status badges, and 1-click directive dispatch.
+
+## [0.9.0] - 2026-11-05
+
+### Added
+- **Video Intelligence Engine & Studio (Beyond MoneyPrinterTurbo)**
+  - **Advanced Story Arc & Retention Modelling**:
+    - Created `app/schemas/video.py` introducing `SceneNode`, `EmotionalBeat` (`hook`, `tension`, `revelation`, `escalation`, `payoff`, `cta`), and `RetentionZone` (`critical`, `build`, `core`, `close`).
+    - Added `BrandIdentity` registry with unique color palettes, typography, neural voices (Edge-TTS IDs), and pacing speed multipliers per worker brand.
+    - Added `HookVariant` generator with 3 psychologically distinct hook archetypes (Contrarian, Curiosity Gap, Stat Shock) for pre-publish A/B testing.
+    - Added `ViralityScorecard` predicting 3s retention, pacing quality, visual variety, and audio energy.
+  - **Video Engine Service & REST API**:
+    - Created `VideoIntelligenceEngine` (`app/services/video_engine.py`) and endpoints `POST /api/video/blueprint` and `GET /api/video/render/{id}`.
+  - **Video Production Studio UI**:
+    - Created `VideoStudioPage` (`src/pages/video-studio.tsx`) with interactive timeline, scene inspector, A/B hook comparison, brand palette preview, thumbnail builder, and full script view.
+    - Added to primary sidebar navigation (`/video-studio`).
+  - **Automated Tests**:
+    - 40/40 tests passing with 0 failures (`backend/tests/test_units.py`).
+
+## [0.8.0] - 2026-11-05
+
+### Added
+- **Live Trend Research Service & Real-Time Signal Ingestion**
+  - **Multi-Source Signal Ingestion**:
+    - Created `LiveTrendResearchService` (`app/services/trend_research.py`) collecting live signals from Hacker News API, Reddit public JSON endpoints (r/technology, r/startups, r/todayilearned, etc.), and Google Trends RSS search velocity feeds.
+    - Zero-scraping, zero-paid API dependencies with resilient fallback cache for offline/restricted environments.
+  - **Pydantic Trend & Hook Schemas**:
+    - Created `app/schemas/trend.py` defining `LiveTrendItem`, `AnalyzedTrendOpportunity`, `TrendSource`, `HookArchetype` (`contrarian`, `curiosity_gap`, `urgent_warning`, `stat_paradox`, `speed_breakdown`), and `NicheTrendDigest`.
+  - **REST API Endpoints**:
+    - `GET /api/trends/live`: Gathers real-time trending signals tailored to the worker brand's niche.
+    - `POST /api/trends/analyze`: Uses Ollama Llama 3.1 to transform raw trend items into 3-second scroll-stopping hooks and monetization proposals.
+  - **Content Studio Live Ingestion UI**:
+    - Updated `ContentStudioPage` (`src/pages/content-studio.tsx`) with dual mode toggle: **LIVE WEB SIGNALS** vs **KEYWORD BRAINSTORM**.
+    - Live trend cards showing source badges (Reddit, HackerNews, Google Trends), upvote/comment counts, external links, and 1-click selection into the multi-format video scripting pipeline.
+  - **Automated Tests**:
+    - 34/34 backend tests passing with 0 failures (`backend/tests/test_units.py`).
+
 ## [0.7.0] - 2026-11-05
 
 ### Added

@@ -5,9 +5,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleDollarSign,
+  Clapperboard,
   Clock,
   Eye,
   FileText,
+  Film,
+  Play,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -47,6 +50,13 @@ export default function ApprovalQueuePage() {
   });
 
   const activeTask = selectedTask || tasks[0] || null;
+
+  const videoUrl = (() => {
+    if (!activeTask) return null;
+    const combined = `${activeTask.objective} ${activeTask.output || ""}`;
+    const match = combined.match(/(\/storage\/videos\/[^\s'"]+\.mp4)/);
+    return match ? match[1] : null;
+  })();
 
   return (
     <div className="space-y-6">
@@ -149,6 +159,31 @@ export default function ApprovalQueuePage() {
                     NEEDS APPROVAL
                   </span>
                 </div>
+
+                {videoUrl && (
+                  <div className="rounded-xl border border-hive/30 bg-gradient-to-b from-[#121824] to-[#0a0d14] p-4 space-y-3 shadow-glass">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-mono text-[10px] text-hive font-semibold">
+                        <Film size={14} />
+                        PHYSICAL 9:16 MP4 READY FOR VERIFICATION
+                      </div>
+                      <a
+                        href={videoUrl}
+                        download="hive-deliverable.mp4"
+                        className="font-mono text-[10px] text-gray-400 hover:text-hive transition-colors underline"
+                      >
+                        Download MP4
+                      </a>
+                    </div>
+                    <div className="flex items-center justify-center rounded-xl bg-black/90 p-4 border border-border">
+                      <video
+                        controls
+                        src={videoUrl}
+                        className="aspect-[9/16] max-h-[360px] w-auto rounded-xl shadow-[0_0_30px_rgba(245,166,35,0.15)] border border-white/10"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {activeTask.content ? (
                   <div className="space-y-3 text-[11px]">

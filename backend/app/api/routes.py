@@ -8,6 +8,9 @@ from app.schemas.audit import AuditLogEntry
 from app.schemas.content import TopicOpportunity, MultiFormatDeliverable
 from app.schemas.platform import PlatformType, AccountConnection, ScheduledPublication
 from app.schemas.revenue import RevenueEvent, CostEvent, WorkerProfitability, FinancialSummary, RevenueStream, AttributionType, CostType
+from app.schemas.trend import LiveTrendItem, TrendAnalysisRequest, NicheTrendDigest
+from app.schemas.video import VideoProductionBlueprint, ViralityScorecard, RenderJobStatus
+from app.schemas.briefing import MasterExecutiveBriefing, WorkerPerformanceDigest
 from app.workers.registry import list_workers, get_worker
 from app.master.agent import delegate
 from app.master.strategy import prioritize_task
@@ -19,6 +22,10 @@ from app.services.content_pipeline import content_pipeline
 from app.services.publishing_service import publishing_service
 from app.services.revenue_service import revenue_service
 from app.services.system_monitor import system_monitor
+from app.services.trend_research import trend_research_service
+from app.services.video_engine import video_engine
+from app.services.video_renderer import video_renderer
+from app.services.master_briefing import master_briefing_service
 from app.dependencies import get_llm_service
 from app.config import Settings, get_settings
 from app.core.exceptions import WorkerNotFoundError, WorkerDisabledError, KillSwitchActiveError, LLMError
@@ -79,6 +86,18 @@ async def master_status(settings: Settings = Depends(get_settings)):
 @router.post("/master/prioritize", response_model=TaskPlan)
 async def prioritize(request: TaskRequest):
     return prioritize_task(request)
+
+@router.get("/master/briefing", response_model=MasterExecutiveBriefing)
+async def get_master_briefing():
+    return master_briefing_service.get_latest_briefing()
+
+@router.post("/master/briefing/generate", response_model=MasterExecutiveBriefing)
+async def generate_master_briefing(llm: LLMService = Depends(get_llm_service)):
+    return await master_briefing_service.generate_fresh_briefing(llm=llm)
+
+@router.post("/master/briefing/approve", response_model=MasterExecutiveBriefing)
+async def approve_master_directives():
+    return master_briefing_service.approve_and_dispatch()
 
 # ============================================================================
 # WORKERS MANAGEMENT
@@ -180,6 +199,86 @@ async def record_cost_endpoint(req: RecordCostRequest):
         worker_id=req.worker_id,
         task_id=req.task_id,
     )
+
+# ============================================================================
+# VIDEO INTELLIGENCE ENGINE
+# ============================================================================
+class VideoBlueprintRequest(BaseModel):
+    worker_id: str
+    trend_title: str
+    trend_summary: str | None = None
+    source_trend_id: str | None = None
+
+@router.post("/video/blueprint", response_model=VideoProductionBlueprint)
+async def generate_video_blueprint(
+    req: VideoBlueprintRequest,
+    llm: LLMService = Depends(get_llm_service),
+):
+    try:
+        return await video_engine.generate_blueprint_from_trend(
+            worker_id=req.worker_id,
+            trend_title=req.trend_title,
+            trend_summary=req.trend_summary,
+            source_trend_id=req.source_trend_id,
+            llm=llm,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Worker '{req.worker_id}' not found")
+    except Exception as exc:
+        logger.exception("Error generating video blueprint")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/video/render", response_model=RenderJobStatus)
+async def render_video_endpoint(blueprint: VideoProductionBlueprint):
+    try:
+        return video_renderer.start_background_render(blueprint)
+    except Exception as exc:
+        logger.exception("Error initiating video render")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/video/render/{job_id}", response_model=RenderJobStatus)
+async def get_render_status(job_id: str):
+    job = video_renderer.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Render job not found")
+    return job
+
+@router.get("/video/library")
+async def list_video_library():
+    return video_renderer.list_rendered_videos()
+
+# ============================================================================
+# LIVE TREND RESEARCH SERVICE
+# ============================================================================
+@router.get("/trends/live", response_model=list[LiveTrendItem])
+async def get_live_trends(worker_id: str = Query("tech"), limit: int = Query(8, ge=1, le=25)):
+    try:
+        return await trend_research_service.get_live_trends_for_worker(worker_id=worker_id, limit=limit)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Worker '{worker_id}' not found")
+    except Exception as exc:
+        logger.exception("Error fetching live trends")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/trends/analyze", response_model=NicheTrendDigest)
+async def analyze_live_trends(
+    req: TrendAnalysisRequest,
+    llm: LLMService = Depends(get_llm_service),
+):
+    try:
+        items = await trend_research_service.get_live_trends_for_worker(worker_id=req.worker_id)
+        if req.trend_ids:
+            items = [item for item in items if item.id in req.trend_ids]
+        return await trend_research_service.analyze_trends_with_llm(
+            worker_id=req.worker_id,
+            trends=items,
+            llm=llm,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Worker '{req.worker_id}' not found")
+    except Exception as exc:
+        logger.exception("Error analyzing live trends")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 # ============================================================================
 # CONTENT PRODUCTION STUDIO (MILESTONE 4)

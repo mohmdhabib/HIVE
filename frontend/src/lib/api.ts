@@ -12,6 +12,198 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json();
 }
 
+export interface LiveTrendItem {
+  id: string;
+  title: string;
+  source: "hackernews" | "reddit" | "google_trends" | "rss" | "simulated";
+  url?: string | null;
+  niche: string;
+  score: number;
+  comment_count: number;
+  published_at?: string | null;
+  summary?: string | null;
+}
+
+export interface AnalyzedTrendOpportunity {
+  source_trend_id: string;
+  headline: string;
+  hook_angle: string;
+  hook_archetype: "contrarian" | "curiosity_gap" | "urgent_warning" | "behind_the_scenes" | "stat_paradox" | "speed_breakdown";
+  audience_appeal: string;
+  virality_score: number;
+  monetization_hypothesis: string;
+  suggested_formats: string[];
+}
+
+export interface NicheTrendDigest {
+  worker_id: string;
+  niche: string;
+  timestamp: string;
+  total_signals: number;
+  trends: LiveTrendItem[];
+  opportunities: AnalyzedTrendOpportunity[];
+}
+
+// ---------------------------------------------------------------------------
+// VIDEO INTELLIGENCE ENGINE TYPES
+// ---------------------------------------------------------------------------
+
+export interface VisualDirective {
+  description: string;
+  visual_type: string;
+  search_keywords: string[];
+  visual_metaphor?: string | null;
+  camera_motion: string;
+  color_mood?: string | null;
+}
+
+export interface AudioDirective {
+  voiceover_text: string;
+  voiceover_emphasis: string[];
+  voice_tone: string;
+  sfx_cue?: string | null;
+  music_energy: string;
+}
+
+export interface SceneNode {
+  scene_id: string;
+  emotional_beat: string;
+  retention_zone: string;
+  duration_seconds: number;
+  visual: VisualDirective;
+  audio: AudioDirective;
+  caption_style: string;
+  transition_in: string;
+  pacing_note?: string | null;
+}
+
+export interface BrandColorPalette {
+  primary: string;
+  secondary: string;
+  accent: string;
+  text_primary: string;
+  text_secondary: string;
+  caption_highlight: string;
+  caption_background: string;
+}
+
+export interface BrandTypography {
+  heading_font: string;
+  body_font: string;
+  caption_font: string;
+  caption_size: number;
+}
+
+export interface BrandIdentity {
+  worker_id: string;
+  brand_name: string;
+  colors: BrandColorPalette;
+  typography: BrandTypography;
+  default_voice: string;
+  voice_speed: number;
+}
+
+export interface HookVariant {
+  variant_id: string;
+  variant_label: string;
+  hook_text: string;
+  hook_visual_description: string;
+  predicted_retention_3s: number;
+  hook_archetype: string;
+}
+
+export interface ThumbnailSpec {
+  headline_text: string;
+  subtext?: string | null;
+  emotion: string;
+  layout: string;
+  background_image_keywords: string[];
+  arrow_or_circle: boolean;
+}
+
+export interface ViralityScorecard {
+  overall_score: number;
+  hook_strength: number;
+  pacing_quality: number;
+  visual_variety: number;
+  audio_energy: number;
+  cta_clarity: number;
+  shareability: number;
+  risk_flags: string[];
+  recommendation: string;
+}
+
+export interface VideoProductionBlueprint {
+  blueprint_id: string;
+  worker_id: string;
+  source_trend_id?: string | null;
+  title: string;
+  description: string;
+  scenes: SceneNode[];
+  total_duration_seconds: number;
+  brand: BrandIdentity;
+  hook_variants: HookVariant[];
+  selected_hook_variant: string;
+  thumbnail: ThumbnailSpec;
+  virality_score?: ViralityScorecard | null;
+  hashtags: string[];
+  target_platforms: string[];
+  created_at?: string | null;
+}
+
+export interface RenderJobStatus {
+  job_id: string;
+  blueprint_id: string;
+  worker_id: string;
+  status: "queued" | "downloading_assets" | "generating_tts" | "compositing" | "encoding" | "complete" | "failed";
+  progress_pct: number;
+  current_step?: string | null;
+  output_path?: string | null;
+  thumbnail_path?: string | null;
+  error_message?: string | null;
+  duration_seconds?: number | null;
+  file_size_mb?: number | null;
+}
+
+export interface RenderedVideoItem {
+  blueprint_id: string;
+  filename: string;
+  video_url: string;
+  thumbnail_url?: string | null;
+  size_mb: number;
+  created_at: string;
+}
+
+export interface WorkerPerformanceDigest {
+  worker_id: string;
+  worker_name: string;
+  niche: string;
+  yesterday_reach: number;
+  avg_3s_retention_pct: number;
+  top_performing_hook?: string | null;
+  top_performing_archetype: string;
+  status_signal: "viral" | "high_performing" | "average" | "underperforming" | "hook_fatigue";
+  diagnosis: string;
+  recommended_pivot: string;
+  proposed_topic: string;
+  proposed_daily_hook: string;
+  virality_probability: number;
+}
+
+export interface MasterExecutiveBriefing {
+  briefing_id: string;
+  date: string;
+  headline: string;
+  executive_summary: string;
+  network_reach_24h: number;
+  network_retention_avg_pct: number;
+  viral_winners: WorkerPerformanceDigest[];
+  underperformers: WorkerPerformanceDigest[];
+  worker_directives: WorkerPerformanceDigest[];
+  system_recommendation: string;
+  status: "pending_review" | "approved" | "executing";
+}
+
 export interface WorkerRevenueTarget {
   monthly_target_usd: number;
   primary_stream: string;
@@ -271,6 +463,7 @@ export const api = {
     }),
   masterStatus: () => request<MasterStatus>("/master/status"),
   financialSummary: () => request<FinancialSummary>("/revenue/summary"),
+  revenueSummary: () => request<FinancialSummary>("/revenue/summary"),
   workerProfitability: (id: string) => request<WorkerProfitability>(`/revenue/workers/${id}`),
   workers: () => request<Worker[]>("/workers"),
   workerDetail: (id: string) => request<Worker>(`/workers/${id}`),
@@ -290,6 +483,7 @@ export const api = {
     const query = params.toString() ? `?${params.toString()}` : "";
     return request<TaskReport[]>(`/tasks${query}`);
   },
+  pendingTasks: () => request<TaskReport[]>("/tasks?status=needs_approval"),
   getTask: (id: string) => request<TaskReport>(`/tasks/${id}`),
   approveTask: (id: string) => request<TaskReport>(`/tasks/${id}/approve`, { method: "POST" }),
   rejectTask: (id: string, reason?: string) =>
@@ -332,4 +526,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ platform_url }),
     }),
+  liveTrends: (worker_id: string = "tech", limit: number = 8) =>
+    request<LiveTrendItem[]>(`/trends/live?worker_id=${encodeURIComponent(worker_id)}&limit=${limit}`),
+  analyzeTrends: (data: { worker_id: string; trend_ids?: string[] }) =>
+    request<NicheTrendDigest>("/trends/analyze", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  generateVideoBlueprint: (data: { worker_id: string; trend_title: string; trend_summary?: string; source_trend_id?: string }) =>
+    request<VideoProductionBlueprint>("/video/blueprint", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  masterBriefing: () => request<MasterExecutiveBriefing>("/master/briefing"),
+  generateMasterBriefing: () =>
+    request<MasterExecutiveBriefing>("/master/briefing/generate", {
+      method: "POST",
+    }),
+  approveMasterBriefing: () =>
+    request<MasterExecutiveBriefing>("/master/briefing/approve", {
+      method: "POST",
+    }),
+  renderVideo: (blueprint: VideoProductionBlueprint) =>
+    request<RenderJobStatus>("/video/render", {
+      method: "POST",
+      body: JSON.stringify(blueprint),
+    }),
+  renderStatus: (jobId: string) => request<RenderJobStatus>(`/video/render/${encodeURIComponent(jobId)}`),
+  videoLibrary: () => request<RenderedVideoItem[]>("/video/library"),
 };

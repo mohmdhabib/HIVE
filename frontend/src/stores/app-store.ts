@@ -7,6 +7,8 @@ interface AppState {
   setSelectedWorker: (id: string | null) => void;
   systemOnline: boolean;
   setSystemOnline: (online: boolean) => void;
+  preloadedTrend: { title: string; summary?: string } | null;
+  setPreloadedTrend: (trend: { title: string; summary?: string } | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -16,4 +18,6 @@ export const useAppStore = create<AppState>((set) => ({
   setSelectedWorker: (id) => set({ selectedWorkerId: id }),
   systemOnline: false,
   setSystemOnline: (online) => set({ systemOnline: online }),
+  preloadedTrend: null,
+  setPreloadedTrend: (trend) => set({ preloadedTrend: trend }),
 }));
