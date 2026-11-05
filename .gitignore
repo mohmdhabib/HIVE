@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+*.log
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Storage (keep dirs, ignore content)
+storage/images/*
+storage/videos/*
+storage/temporary/*
+!storage/images/.gitkeep
+!storage/videos/.gitkeep
+!storage/temporary/.gitkeep
+

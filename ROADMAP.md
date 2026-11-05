@@ -1,0 +1,53 @@
+# Product Roadmap
+
+## Milestone Overview
+
+- [x] **Milestone 0: Repository Audit**
+  - Architecture assessment, dependency review, security gap analysis, detailed roadmap.
+- [x] **Milestone 1: Foundation (Current)**
+  - Unified configuration management with Pydantic Settings.
+  - Structured logging and custom exception hierarchy.
+  - Concurrency-controlled shared LLM service.
+  - LangGraph Master Agent workflow with kill switch and validation gates.
+  - Modernized Vite frontend: Tailwind CSS, React Router (12 pages), TanStack Query, Zustand, Lucide icons.
+  - Comprehensive documentation suite and test harness.
+- [x] **Milestone 2: Master Agent & Worker Engine (Completed)**
+  - Expanded LangGraph multi-node state machine (5 nodes: kill switch, priority planning, assignment validation, worker delegation, editorial evaluator).
+  - Reusable 4-node worker execution pipeline (Research → Content Piece Generation → Quality & Factuality Check → Report Packaging).
+  - Structured Pydantic parsing of LLM outputs (JSON mode via `format="json"` with fallback repair).
+  - Master Agent priority and token budgeting strategy (`strategy.py`).
+  - Editorial safety and quality check evaluator (`evaluator.py`).
+  - Rich brand identities (content pillars, monthly revenue targets, voice guidelines).
+  - Modernized frontend dashboard displaying structured deliverables (hooks, script, caption, visual brief, monetization hypothesis, factual verification flags, risk rating).
+- [x] **Milestone 3: Persistence & Memory (Completed)**
+  - Supabase PostgreSQL schema and migration script with RLS policies (`001_initial_schema.sql`).
+  - Isolated worker memory stores (`memory.py`) tracking topic history, winning patterns, and sanitized cross-worker learning.
+  - Persistent task execution store with full approval lifecycle (`task_store.py`).
+  - System-wide security and operational audit logging (`audit.py`).
+  - Interactive Approval Queue UI with 1-click publishing authorization and operator revision feedback (`approval-queue.tsx`).
+  - Worker Details & Memory Inspector UI (`worker-details.tsx`).
+- [x] **Milestone 4: Content Production Pipeline (Completed)**
+  - Automated topic discovery & trend research service with monetization hypotheses (`content_pipeline.py`).
+  - Multi-format deliverable engine (Short-form video script, X/Twitter thread, educational carousel slides).
+  - Creative visual asset brief generator with Midjourney / Flux / SDXL generation prompts and aspect ratio configurations (`CreativeAssetBrief`).
+  - Content Studio operations UI (`content-studio.tsx`) with topic selection, multi-channel asset preview, and 1-click dispatch to the Master Approval Queue.
+- [x] **Milestone 5: Social Media Integrations (Completed)**
+  - Reusable platform adapter abstraction (`base.py`).
+  - Adapters for Instagram, YouTube, X/Twitter, and Facebook with official permission and scope checks.
+  - Universal sanitized manual publishing fallback (`manual.py`) preventing fake publishing claims.
+  - Scheduling and publishing service (`publishing_service.py`) enforcing mandatory human approval gates before scheduling.
+  - Publishing Calendar UI (`publishing.tsx`) with queue overview, manual dispatch copier, and 1-click publishing.
+  - Platform Integrations UI (`integrations.tsx`) with OAuth2 scopes checklist and worker account mapping.
+- [x] **Milestone 6: Revenue Engine (Completed)**
+  - First-class revenue attribution models (`affiliate`, `sponsorship`, `lead_gen`, `digital_product`, `platform_rpm`).
+  - Separation of measured, imported, and estimated earnings with verifiable conversion tracking (`revenue_service.py`).
+  - Cost tracking engine logging LLM inference, infrastructure, and asset production overheads.
+  - Granular ROI and net margin calculations per niche worker and content campaign.
+  - Interactive Revenue & Analytics UI (`revenue.tsx` & `analytics.tsx`) featuring real-time profitability breakdown, stream distributions, and worker earnings rankings.
+- [x] **Milestone 7: Production Hardening (Completed)**
+  - Comprehensive system telemetry monitor (`system_monitor.py`) tracking fleet status, LLM response latency, task queue depths, disk storage integrity, and audit velocity.
+  - Global emergency kill-switch circuit breaker with instantaneous REST control (`/api/system/kill-switch`).
+  - Operational health diagnostics dashboard (`system-health.tsx`) and fleet configuration settings (`settings.tsx`).
+  - Supabase client integration (`@supabase/supabase-js`, `utils/supabase.ts`, `lib/supabase.ts`) wired to real cloud endpoints.
+  - Production-ready Vite build and 31/31 unit test suite coverage.
+
