@@ -8,32 +8,41 @@ import {
   type LiveTrendItem,
   type RenderJobStatus,
   type RenderedVideoItem,
+  type VaultAsset,
 } from "@/lib/api";
 import { useWorkers } from "@/hooks/use-workers";
 import { useAppStore } from "@/stores/app-store";
 import {
   ArrowDownToLine,
   Bot,
+  Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clapperboard,
   Clock,
   Download,
   ExternalLink,
   Eye,
+  FileVideo,
   Film,
   Flame,
   Gauge,
+  Globe,
   Image as ImageIcon,
   Layers,
+  Link2,
   Loader2,
   MessageSquare,
   Mic,
   Music,
   Palette,
   Play,
+  RefreshCw,
   RotateCw,
   Scissors,
   Send,
+  Sliders,
   Sparkles,
   Target,
   TrendingUp,
@@ -84,12 +93,90 @@ export default function VideoStudioPage() {
   const [renderJob, setRenderJob] = useState<RenderJobStatus | null>(null);
   const [dispatchedApproval, setDispatchedApproval] = useState(false);
 
+  // Scene Clip Editor Form State
+  const [editedVoiceover, setEditedVoiceover] = useState<string>("");
+  const [editedKeywords, setEditedKeywords] = useState<string>("");
+  const [editedMotion, setEditedMotion] = useState<string>("slow_zoom_in");
+  const [selectedVaultAsset, setSelectedVaultAsset] = useState<string>("");
+  const [sceneLayerTab, setSceneLayerTab] = useState<"clip" | "overlay" | "audio">("clip");
+  const sceneVideoRef = useRef<HTMLVideoElement | null>(null);
+
   const activeWorker = workers.find((w) => w.id === selectedWorkerId) || workers[0];
 
   // Video Library Query
   const { data: library = [], refetch: refetchLibrary } = useQuery({
     queryKey: ["video-library"],
     queryFn: api.videoLibrary,
+  });
+
+  const [importUrl, setImportUrl] = useState("");
+  const [vaultNiche, setVaultNiche] = useState("tech");
+
+  // Media Vault Query
+  const { data: vaultAssets = [], refetch: refetchVault, isFetching: isFetchingVault } = useQuery({
+    queryKey: ["materials-vault", vaultNiche],
+    queryFn: () => api.vaultMaterials(vaultNiche),
+  });
+
+  // Scene Clips Query
+  const { data: sceneClips = [], refetch: refetchClips } = useQuery({
+    queryKey: ["scene-clips", blueprint?.blueprint_id],
+    queryFn: () => (blueprint ? api.blueprintSceneClips(blueprint.blueprint_id) : []),
+    enabled: !!blueprint?.blueprint_id,
+  });
+
+  const activeClips = renderJob?.scene_clips && renderJob.scene_clips.length > 0
+    ? renderJob.scene_clips
+    : sceneClips;
+
+  const selectedSceneIndex = blueprint?.scenes.findIndex((s) => s.scene_id === selectedSceneId) ?? -1;
+  const selectedScene = blueprint?.scenes.find((s) => s.scene_id === selectedSceneId) || null;
+  const currentSceneClip = selectedSceneIndex >= 0 ? activeClips.find((c) => c.scene_idx === selectedSceneIndex) : null;
+
+  useEffect(() => {
+    if (selectedScene) {
+      setEditedVoiceover(selectedScene.audio.voiceover_text);
+      setEditedKeywords(selectedScene.visual.search_keywords.join(", "));
+      setEditedMotion(selectedScene.visual.camera_motion || "slow_zoom_in");
+      setSelectedVaultAsset("");
+      setSceneLayerTab("clip");
+    }
+  }, [selectedSceneId, selectedScene]);
+
+  // Harvest Batch Mutation
+  const harvestBatchMutation = useMutation({
+    mutationFn: () => api.harvestBatch({ niche: vaultNiche, count: 4 }),
+    onSuccess: () => {
+      refetchVault();
+    },
+  });
+
+  // Harvest URL Mutation (yt-dlp)
+  const harvestUrlMutation = useMutation({
+    mutationFn: () => api.harvestUrl({ url: importUrl.trim(), niche: vaultNiche }),
+    onSuccess: () => {
+      setImportUrl("");
+      refetchVault();
+    },
+  });
+
+  // Regenerate Single Scene Mutation
+  const regenerateSceneMutation = useMutation({
+    mutationFn: () => {
+      if (!blueprint || selectedSceneIndex < 0) return Promise.reject("No scene selected");
+      const keywords = editedKeywords.split(",").map((k) => k.trim()).filter(Boolean);
+      return api.regenerateSceneClip(blueprint.blueprint_id, selectedSceneIndex, {
+        voiceover_text: editedVoiceover.trim() || undefined,
+        search_keywords: keywords.length > 0 ? keywords : undefined,
+        camera_motion: editedMotion || undefined,
+        custom_asset_path: selectedVaultAsset || undefined,
+      });
+    },
+    onSuccess: (updatedJob) => {
+      setRenderJob(updatedJob);
+      refetchClips();
+      queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    },
   });
 
   const blueprintMutation = useMutation({
@@ -157,7 +244,6 @@ export default function VideoStudioPage() {
     },
   });
 
-  const selectedScene = blueprint?.scenes.find((s) => s.scene_id === selectedSceneId) || null;
   const virality = blueprint?.virality_score;
 
   return (
@@ -455,7 +541,7 @@ export default function VideoStudioPage() {
               { id: "brand" as const, label: "BRAND IDENTITY", icon: Palette },
               { id: "thumbnail" as const, label: "THUMBNAIL", icon: ImageIcon },
               { id: "score" as const, label: "FULL SCRIPT", icon: Type },
-              { id: "vault" as const, label: `VAULT (${library.length})`, icon: Clapperboard },
+              { id: "vault" as const, label: `VAULT (${vaultAssets.length})`, icon: Clapperboard },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -779,169 +865,402 @@ export default function VideoStudioPage() {
             </div>
           )}
 
-          {/* SCENE GRAPH PANEL */}
+          {/* SCENE CLIPS & INTERACTIVE VIDEO EDITOR PANEL */}
           {activePanel === "scenes" && (
-            <div className="grid gap-4 lg:grid-cols-3">
-              {/* Scene Timeline */}
-              <div className="lg:col-span-1 rounded-xl border border-border bg-surface p-4 space-y-2 max-h-[600px] overflow-y-auto">
-                <div className="font-mono text-[9px] text-gray-400 tracking-wider mb-3">SCENE TIMELINE</div>
-                {blueprint.scenes.map((scene, i) => {
-                  const isActive = selectedSceneId === scene.scene_id;
-                  return (
-                    <button
-                      key={scene.scene_id}
-                      onClick={() => setSelectedSceneId(scene.scene_id)}
-                      className={cn(
-                        "w-full rounded-lg border p-3 text-left transition-all",
-                        isActive
-                          ? "border-hive/50 bg-hive/5 shadow-[0_0_12px_rgba(245,166,35,0.08)]"
-                          : "border-border bg-surface-deep hover:border-border-strong"
-                      )}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className={cn("rounded px-1.5 py-0.5 text-[9px] font-mono font-bold border", BEAT_COLORS[scene.emotional_beat] || "")}>
-                          {scene.emotional_beat.toUpperCase()}
-                        </span>
-                        <span className="font-mono text-[10px] text-gray-500">
-                          {scene.duration_seconds.toFixed(1)}s
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-gray-300 line-clamp-2">
-                        {scene.audio.voiceover_text}
-                      </div>
-                      <div className="mt-1.5 flex items-center gap-2 text-[9px] font-mono text-gray-500">
-                        <span>{scene.visual.visual_type.replace("_", " ")}</span>
-                        <span>•</span>
-                        <span>{scene.transition_in}</span>
-                        {scene.audio.sfx_cue && (
-                          <>
-                            <span>•</span>
-                            <span className="text-hive">{scene.audio.sfx_cue}</span>
-                          </>
+            <div className="space-y-6">
+              {/* Top Storyboard Strip: Horizontal Visual Scene Cards */}
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Scissors size={15} className="text-hive" />
+                    <span className="font-mono text-xs font-semibold text-gray-200">
+                      INTERACTIVE STORYBOARD & CLIP REPOSITORY
+                    </span>
+                    <span className="rounded bg-hive/10 px-2 py-0.5 font-mono text-[9px] text-hive border border-hive/20">
+                      {blueprint.scenes.length} INDEPENDENT SCENES
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10px] text-gray-400">
+                    Click any scene to inspect, play isolated clip, or edit & regenerate
+                  </span>
+                </div>
+
+                <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
+                  {blueprint.scenes.map((scene, i) => {
+                    const isActive = selectedSceneId === scene.scene_id;
+                    const clip = activeClips.find((c) => c.scene_idx === i);
+                    return (
+                      <button
+                        key={scene.scene_id}
+                        onClick={() => setSelectedSceneId(scene.scene_id)}
+                        className={cn(
+                          "group relative flex-shrink-0 w-44 rounded-xl border p-2.5 text-left transition-all",
+                          isActive
+                            ? "border-hive bg-hive/10 shadow-[0_0_20px_rgba(245,166,35,0.18)] scale-[1.02]"
+                            : "border-border bg-surface-deep hover:border-gray-500 hover:bg-surface"
                         )}
-                      </div>
-                    </button>
-                  );
-                })}
+                      >
+                        {/* Visual Thumbnail Frame */}
+                        <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-black border border-white/10 mb-2">
+                          {clip?.thumbnail_path ? (
+                            <img
+                              src={clip.thumbnail_path}
+                              alt={`Scene ${i + 1}`}
+                              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : clip?.overlay_path ? (
+                            <div className="h-full w-full bg-gradient-to-b from-[#151c2c] to-[#0c1017] p-2 flex flex-col items-center justify-center text-center">
+                              <img src={clip.overlay_path} alt="Overlay" className="max-h-full object-contain" />
+                            </div>
+                          ) : (
+                            <div className="h-full w-full bg-gradient-to-b from-[#182030] to-[#0d121c] p-2.5 flex flex-col items-center justify-center text-center space-y-1.5">
+                              <Film size={22} className="text-gray-600 group-hover:text-hive transition-colors" />
+                              <span className="font-mono text-[8px] text-gray-500 uppercase tracking-wider">
+                                {scene.visual.camera_motion.replace("_", " ")}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Hover Play Button Overlay */}
+                          {clip?.clip_path && (
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                              <span className="flex items-center gap-1 rounded-full bg-hive px-2.5 py-1 text-[9px] font-mono font-bold text-[#090b10] shadow-lg">
+                                <Play size={10} className="fill-current" />
+                                PLAY CLIP
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Beat Badge Top */}
+                          <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between pointer-events-none">
+                            <span className={cn("rounded px-1.5 py-0.5 text-[8px] font-mono font-bold border backdrop-blur-md shadow", BEAT_COLORS[scene.emotional_beat] || "")}>
+                              S{i + 1}: {scene.emotional_beat.toUpperCase()}
+                            </span>
+                            <span className="rounded bg-black/70 backdrop-blur-md px-1.5 py-0.5 text-[8px] font-mono text-gray-300 border border-white/10">
+                              {scene.duration_seconds.toFixed(1)}s
+                            </span>
+                          </div>
+
+                          {/* Ready / Status Badge Bottom */}
+                          <div className="absolute bottom-1.5 left-1.5 pointer-events-none">
+                            {clip?.clip_path ? (
+                              <span className="flex items-center gap-1 rounded bg-emerald-500/80 backdrop-blur-md px-1.5 py-0.5 text-[7px] font-mono text-white font-semibold">
+                                <Check size={8} />
+                                READY
+                              </span>
+                            ) : (
+                              <span className="rounded bg-black/60 backdrop-blur-md px-1.5 py-0.5 text-[7px] font-mono text-gray-400">
+                                PENDING
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Voiceover preview line */}
+                        <div className="text-[10px] text-gray-300 line-clamp-2 leading-tight">
+                          {scene.audio.voiceover_text}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Scene Inspector */}
-              <div className="lg:col-span-2 rounded-xl border border-border bg-surface p-5 space-y-4">
-                {selectedScene ? (
-                  <>
-                    <div className="flex items-center justify-between border-b border-border pb-3">
-                      <div>
-                        <div className="font-mono text-[9px] text-gray-400">SCENE INSPECTOR</div>
-                        <h3 className="font-display text-lg font-semibold mt-0.5">{selectedScene.scene_id}</h3>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={cn("rounded px-2 py-1 text-[9px] font-mono font-bold border", BEAT_COLORS[selectedScene.emotional_beat] || "")}>
-                          {selectedScene.emotional_beat.toUpperCase()}
-                        </span>
-                        <span className="rounded bg-surface-deep px-2 py-1 text-[9px] font-mono text-gray-400 border border-border">
-                          {ZONE_LABELS[selectedScene.retention_zone] || selectedScene.retention_zone}
-                        </span>
-                      </div>
+              {/* 2-Column Split: Scene Clip Viewer (Left) + Interactive Scene Editor (Right) */}
+              <div className="grid gap-6 lg:grid-cols-12">
+                {/* Left Column (5 cols): Focused Scene Clip Player & Layer Diagnostic */}
+                <div className="lg:col-span-5 rounded-xl border border-border bg-surface p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-border pb-3">
+                    <div className="flex items-center gap-2">
+                      <FileVideo size={16} className="text-hive" />
+                      <h3 className="font-display text-sm font-semibold text-gray-100">
+                        Scene {selectedSceneIndex + 1} Clip Viewer
+                      </h3>
                     </div>
+                    {currentSceneClip?.clip_path && (
+                      <span className="font-mono text-[9px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded px-2 py-0.5">
+                        ✓ RENDERED 1080×1920
+                      </span>
+                    )}
+                  </div>
 
-                    {/* Visual Directive */}
-                    <div className="rounded-lg border border-border bg-surface-deep p-4 space-y-3">
-                      <div className="flex items-center gap-2 font-mono text-[9px] text-gray-400">
-                        <Eye size={12} className="text-hive" />
-                        VISUAL DIRECTIVE
-                      </div>
-                      <p className="text-xs text-gray-200">{selectedScene.visual.description}</p>
-                      <div className="grid grid-cols-2 gap-3 text-[10px]">
-                        <div>
-                          <span className="block font-mono text-[9px] text-gray-500 mb-0.5">TYPE</span>
-                          <span className="text-gray-300">{selectedScene.visual.visual_type.replace("_", " ")}</span>
-                        </div>
-                        <div>
-                          <span className="block font-mono text-[9px] text-gray-500 mb-0.5">CAMERA</span>
-                          <span className="text-gray-300">{selectedScene.visual.camera_motion.replace("_", " ")}</span>
-                        </div>
-                        {selectedScene.visual.visual_metaphor && (
-                          <div className="col-span-2">
-                            <span className="block font-mono text-[9px] text-gray-500 mb-0.5">VISUAL METAPHOR</span>
-                            <span className="text-hive italic text-xs">{selectedScene.visual.visual_metaphor}</span>
-                          </div>
-                        )}
-                        {selectedScene.visual.search_keywords.length > 0 && (
-                          <div className="col-span-2">
-                            <span className="block font-mono text-[9px] text-gray-500 mb-0.5">B-ROLL SEARCH</span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {selectedScene.visual.search_keywords.map((kw) => (
-                                <span key={kw} className="rounded bg-surface px-2 py-0.5 text-[10px] text-gray-300 border border-border">
-                                  {kw}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  {/* Layer Tabs: Composited Clip vs Subtitle Overlay vs Narration Audio */}
+                  <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-deep p-1 font-mono text-[9px]">
+                    <button
+                      onClick={() => setSceneLayerTab("clip")}
+                      className={cn(
+                        "flex-1 rounded py-1.5 text-center transition-colors font-medium",
+                        sceneLayerTab === "clip" ? "bg-hive text-[#090b10] font-bold" : "text-gray-400 hover:text-gray-200"
+                      )}
+                    >
+                      ★ COMPOSITED CLIP
+                    </button>
+                    <button
+                      onClick={() => setSceneLayerTab("overlay")}
+                      className={cn(
+                        "flex-1 rounded py-1.5 text-center transition-colors font-medium",
+                        sceneLayerTab === "overlay" ? "bg-hive text-[#090b10] font-bold" : "text-gray-400 hover:text-gray-200"
+                      )}
+                    >
+                      SUBTITLES ONLY
+                    </button>
+                    <button
+                      onClick={() => setSceneLayerTab("audio")}
+                      className={cn(
+                        "flex-1 rounded py-1.5 text-center transition-colors font-medium",
+                        sceneLayerTab === "audio" ? "bg-hive text-[#090b10] font-bold" : "text-gray-400 hover:text-gray-200"
+                      )}
+                    >
+                      VOICEOVER AUDIO
+                    </button>
+                  </div>
 
-                    {/* Audio Directive */}
-                    <div className="rounded-lg border border-border bg-surface-deep p-4 space-y-3">
-                      <div className="flex items-center gap-2 font-mono text-[9px] text-gray-400">
-                        <Mic size={12} className="text-hive" />
-                        AUDIO DIRECTIVE
-                      </div>
-                      <div className="rounded-lg border border-hive/20 bg-hive/5 p-3">
-                        <div className="font-mono text-[9px] text-gray-400 mb-1">VOICEOVER</div>
-                        <p className="text-sm text-gray-100 italic">"{selectedScene.audio.voiceover_text}"</p>
-                      </div>
-                      <div className="grid grid-cols-3 gap-3 text-[10px]">
-                        <div>
-                          <span className="block font-mono text-[9px] text-gray-500 mb-0.5">TONE</span>
-                          <span className="text-gray-300">{selectedScene.audio.voice_tone}</span>
+                  {/* Scene Clip Smartphone Frame */}
+                  <div className="relative mx-auto w-full max-w-[280px] rounded-[36px] border-[4px] border-[#222834] bg-[#0c1017] p-2 shadow-2xl ring-1 ring-white/10">
+                    <div className="relative aspect-[9/16] w-full overflow-hidden rounded-[28px] bg-black">
+                      {sceneLayerTab === "clip" && currentSceneClip?.clip_path ? (
+                        <video
+                          key={currentSceneClip.clip_path}
+                          ref={sceneVideoRef}
+                          controls
+                          autoPlay
+                          loop
+                          src={currentSceneClip.clip_path}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : sceneLayerTab === "overlay" && currentSceneClip?.overlay_path ? (
+                        <div className="h-full w-full bg-gradient-to-b from-[#182030] to-[#0c1017] flex items-center justify-center p-3">
+                          <img src={currentSceneClip.overlay_path} alt="Subtitle Layer" className="w-full object-contain" />
                         </div>
-                        <div>
-                          <span className="block font-mono text-[9px] text-gray-500 mb-0.5">MUSIC</span>
-                          <span className="text-gray-300">{selectedScene.audio.music_energy}</span>
-                        </div>
-                        <div>
-                          <span className="block font-mono text-[9px] text-gray-500 mb-0.5">SFX</span>
-                          <span className={selectedScene.audio.sfx_cue ? "text-hive" : "text-gray-500"}>
-                            {selectedScene.audio.sfx_cue || "none"}
-                          </span>
-                        </div>
-                      </div>
-                      {selectedScene.audio.voiceover_emphasis.length > 0 && (
-                        <div>
-                          <span className="block font-mono text-[9px] text-gray-500 mb-1">EMPHASIS WORDS</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {selectedScene.audio.voiceover_emphasis.map((w) => (
-                              <span key={w} className="rounded bg-hive/20 px-2 py-0.5 text-[10px] text-hive border border-hive/30 font-semibold">
-                                {w}
-                              </span>
-                            ))}
+                      ) : sceneLayerTab === "audio" && currentSceneClip?.voice_path ? (
+                        <div className="h-full w-full bg-gradient-to-b from-[#1a2336] to-[#0d121c] flex flex-col items-center justify-center p-4 text-center space-y-4">
+                          <div className="h-16 w-16 rounded-full bg-hive/20 border border-hive/40 flex items-center justify-center text-hive">
+                            <Volume2 size={28} />
                           </div>
+                          <div>
+                            <span className="font-mono text-[9px] text-hive uppercase tracking-widest block">NEURAL VOICE CADENCE</span>
+                            <span className="text-xs text-gray-300 font-medium line-clamp-3 mt-1">"{selectedScene?.audio.voiceover_text}"</span>
+                          </div>
+                          <audio controls src={currentSceneClip.voice_path} className="w-full h-8" />
+                        </div>
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-b from-[#182030] to-[#0c1017] flex flex-col items-center justify-center p-4 text-center space-y-2">
+                          <Film size={32} className="text-gray-600" />
+                          <span className="font-mono text-[10px] text-gray-400">Clip not rendered yet</span>
+                          <p className="text-[9px] text-gray-500 max-w-[200px]">
+                            Click "Regenerate This Scene" on the right or run full render to preview this clip.
+                          </p>
                         </div>
                       )}
                     </div>
+                  </div>
 
-                    {/* Production Notes */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-lg border border-border bg-surface-deep p-3">
-                        <div className="font-mono text-[9px] text-gray-500 mb-1">TRANSITION IN</div>
-                        <span className="text-xs text-gray-300">{selectedScene.transition_in}</span>
-                      </div>
-                      <div className="rounded-lg border border-border bg-surface-deep p-3">
-                        <div className="font-mono text-[9px] text-gray-500 mb-1">CAPTION STYLE</div>
-                        <span className="text-xs text-gray-300">{selectedScene.caption_style.replace("_", " ")}</span>
-                      </div>
+                  {/* Scene Quality Verification Checklist */}
+                  <div className="rounded-lg border border-border bg-surface-deep p-3.5 space-y-2 text-[10px] font-mono">
+                    <span className="font-bold text-gray-400 block tracking-wider text-[9px]">SCENE QUALITY DIAGNOSTICS</span>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>VISUAL SOURCING:</span>
+                      <span className="text-hive">{selectedScene?.visual.camera_motion.replace("_", " ")}</span>
                     </div>
-                    {selectedScene.pacing_note && (
-                      <div className="rounded-lg border border-hive/20 bg-hive/5 p-3">
-                        <div className="font-mono text-[9px] text-hive mb-1">DIRECTOR'S NOTE</div>
-                        <p className="text-xs text-gray-300 italic">{selectedScene.pacing_note}</p>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>SUBTITLE POSITION:</span>
+                      <span className="text-emerald-400">Centered Eye-Level Sweetspot</span>
+                    </div>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>DURATION:</span>
+                      <span>{selectedScene?.duration_seconds.toFixed(1)}s</span>
+                    </div>
+                    {currentSceneClip?.clip_path && (
+                      <div className="flex items-center justify-between text-gray-300 pt-1 border-t border-border">
+                        <span>CLIP ARTIFACT:</span>
+                        <a href={currentSceneClip.clip_path} download className="text-hive hover:underline flex items-center gap-1">
+                          <Download size={10} />
+                          scene_{selectedSceneIndex}.mp4
+                        </a>
                       </div>
                     )}
-                  </>
-                ) : (
-                  <div className="text-center text-gray-500 py-12">Select a scene to inspect</div>
-                )}
+                  </div>
+                </div>
+
+                {/* Right Column (7 cols): Interactive Scene Editor & Regenerator */}
+                <div className="lg:col-span-7 rounded-xl border border-border bg-surface p-5 space-y-4">
+                  {selectedScene ? (
+                    <>
+                      <div className="flex items-center justify-between border-b border-border pb-3">
+                        <div>
+                          <div className="font-mono text-[9px] text-gray-400">
+                            INTERACTIVE SCENE EDITOR — SCENE {selectedSceneIndex + 1} OF {blueprint.scenes.length}
+                          </div>
+                          <h3 className="font-display text-lg font-semibold mt-0.5">{selectedScene.scene_id}</h3>
+                        </div>
+
+                        {/* Navigation controls */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              if (selectedSceneIndex > 0) {
+                                setSelectedSceneId(blueprint.scenes[selectedSceneIndex - 1].scene_id);
+                              }
+                            }}
+                            disabled={selectedSceneIndex <= 0}
+                            className="rounded border border-border bg-surface-deep p-1.5 text-gray-300 hover:text-white disabled:opacity-30"
+                            title="Previous Scene"
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          <span className="font-mono text-[10px] text-gray-400">
+                            {selectedSceneIndex + 1} / {blueprint.scenes.length}
+                          </span>
+                          <button
+                            onClick={() => {
+                              if (selectedSceneIndex < blueprint.scenes.length - 1) {
+                                setSelectedSceneId(blueprint.scenes[selectedSceneIndex + 1].scene_id);
+                              }
+                            }}
+                            disabled={selectedSceneIndex >= blueprint.scenes.length - 1}
+                            className="rounded border border-border bg-surface-deep p-1.5 text-gray-300 hover:text-white disabled:opacity-30"
+                            title="Next Scene"
+                          >
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Field 1: Voiceover Narration */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider">
+                            VOICEOVER NARRATION TEXT
+                          </label>
+                          <span className="font-mono text-[9px] text-gray-500">
+                            {editedVoiceover.split(/\s+/).filter(Boolean).length} words
+                          </span>
+                        </div>
+                        <textarea
+                          rows={3}
+                          value={editedVoiceover}
+                          onChange={(e) => setEditedVoiceover(e.target.value)}
+                          className="w-full rounded-lg border border-border bg-surface-deep p-3 text-xs text-gray-100 outline-none focus:border-hive/50 font-sans leading-relaxed"
+                          placeholder="Enter exact narration text for this scene..."
+                        />
+                      </div>
+
+                      {/* Field 2 & 3: Keywords & Camera Motion */}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider">
+                            B-ROLL SEARCH KEYWORDS
+                          </label>
+                          <input
+                            type="text"
+                            value={editedKeywords}
+                            onChange={(e) => setEditedKeywords(e.target.value)}
+                            className="w-full rounded-lg border border-border bg-surface-deep px-3 py-2 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
+                            placeholder="e.g. fashion, runway, luxury"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider">
+                            CAMERA MOTION
+                          </label>
+                          <select
+                            value={editedMotion}
+                            onChange={(e) => setEditedMotion(e.target.value)}
+                            className="w-full rounded-lg border border-border bg-surface-deep px-3 py-2 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
+                          >
+                            <option value="slow_zoom_in">Slow Zoom In (Hook & Punch)</option>
+                            <option value="pan_left">Cinematic Pan Left</option>
+                            <option value="slow_zoom_out">Slow Zoom Out (Reveal)</option>
+                            <option value="pan_right">Cinematic Pan Right</option>
+                            <option value="ken_burns">Ken Burns Diagonal Drift</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Field 4: Custom Asset Swap from Media Vault */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider">
+                            SWAP BACKGROUND ASSET FROM MEDIA VAULT (OPTIONAL)
+                          </label>
+                          {selectedVaultAsset && (
+                            <button
+                              onClick={() => setSelectedVaultAsset("")}
+                              className="text-[9px] font-mono text-red-400 hover:underline"
+                            >
+                              CLEAR ASSET OVERRIDE
+                            </button>
+                          )}
+                        </div>
+                        <select
+                          value={selectedVaultAsset}
+                          onChange={(e) => setSelectedVaultAsset(e.target.value)}
+                          className="w-full rounded-lg border border-border bg-surface-deep px-3 py-2 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
+                        >
+                          <option value="">-- Use Dynamic Stock Matching (Unsplash / Stock Bank) --</option>
+                          {vaultAssets.map((asset) => (
+                            <option key={asset.asset_id} value={asset.file_path}>
+                              [{asset.niche.toUpperCase()}] {asset.filename} ({asset.tags.slice(0, 3).join(", ")})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Scene Metadata Preview */}
+                      <div className="grid grid-cols-3 gap-2.5 rounded-lg border border-border bg-surface-deep p-3 text-[10px] font-mono">
+                        <div>
+                          <span className="text-gray-500 block text-[8px]">EMOTIONAL BEAT</span>
+                          <span className={cn("rounded px-1.5 py-0.5 text-[8px] font-bold border inline-block mt-0.5", BEAT_COLORS[selectedScene.emotional_beat] || "")}>
+                            {selectedScene.emotional_beat.toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500 block text-[8px]">RETENTION ZONE</span>
+                          <span className="text-gray-300 font-semibold">{selectedScene.retention_zone}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500 block text-[8px]">TRANSITION IN</span>
+                          <span className="text-hive font-semibold">{selectedScene.transition_in}</span>
+                        </div>
+                      </div>
+
+                      {/* Action Button: Regenerate Single Scene */}
+                      <div className="pt-2">
+                        <button
+                          onClick={() => regenerateSceneMutation.mutate()}
+                          disabled={regenerateSceneMutation.isPending}
+                          className={cn(
+                            "w-full flex items-center justify-center gap-2 rounded-xl py-3 font-mono text-xs font-bold transition-all shadow-lg",
+                            regenerateSceneMutation.isPending
+                              ? "bg-hive/50 text-[#090b10] cursor-wait"
+                              : "bg-hive text-[#090b10] hover:bg-hive-400 shadow-[0_0_20px_rgba(245,166,35,0.25)]"
+                          )}
+                        >
+                          {regenerateSceneMutation.isPending ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              RE-RENDERING SCENE {selectedSceneIndex + 1} & UPDATING MASTER VIDEO…
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw size={14} />
+                              REGENERATE SCENE {selectedSceneIndex + 1} CLIP & RE-STITCH VIDEO
+                            </>
+                          )}
+                        </button>
+                        {regenerateSceneMutation.isSuccess && (
+                          <div className="mt-2 text-center text-[10px] font-mono text-emerald-400 flex items-center justify-center gap-1">
+                            <CheckCircle2 size={12} />
+                            Scene {selectedSceneIndex + 1} updated and full master video re-stitched successfully!
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center text-gray-500 py-12">Select a scene from the storyboard above</div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1195,6 +1514,168 @@ export default function VideoStudioPage() {
                     <span key={tag} className="rounded bg-surface px-2 py-0.5 text-[10px] text-hive border border-hive/20">
                       {tag}
                     </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MEDIA VAULT & AUTOMATED HARVESTER PANEL */}
+          {activePanel === "vault" && (
+            <div className="rounded-xl border border-border bg-surface p-6 space-y-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Clapperboard size={18} className="text-hive" />
+                    <h3 className="font-display text-lg font-semibold">Automated Media Vault & Harvester</h3>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Continuous automated stock video & photography ingestion powered by Unsplash, Wikimedia & yt-dlp.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => harvestBatchMutation.mutate()}
+                    disabled={harvestBatchMutation.isPending}
+                    className="flex items-center gap-1.5 rounded-lg bg-hive px-4 py-2 font-mono text-xs font-semibold text-[#090b10] hover:bg-hive-400 transition-colors disabled:opacity-50"
+                  >
+                    {harvestBatchMutation.isPending ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={13} />
+                    )}
+                    {harvestBatchMutation.isPending ? "HARVESTING..." : "HARVEST STOCK BATCH (4 CLIPS)"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Automated URL Ingestion (yt-dlp) */}
+              <div className="rounded-lg border border-border bg-surface-deep p-4 space-y-3">
+                <div className="flex items-center gap-2 font-mono text-xs font-semibold text-gray-200">
+                  <Link2 size={14} className="text-hive" />
+                  <span>AUTOMATED URL HARVESTER (YT-DLP)</span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="url"
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    placeholder="Paste YouTube Shorts, video link, or direct MP4 URL to automatically cut & harvest..."
+                    className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-gray-200 outline-none focus:border-hive/50"
+                  />
+                  <button
+                    onClick={() => harvestUrlMutation.mutate()}
+                    disabled={harvestUrlMutation.isPending || !importUrl.trim()}
+                    className="flex items-center justify-center gap-1.5 rounded-lg bg-surface border border-hive/40 px-4 py-2 font-mono text-xs text-hive hover:bg-hive/10 disabled:opacity-50 transition-colors"
+                  >
+                    {harvestUrlMutation.isPending ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Download size={13} />
+                    )}
+                    {harvestUrlMutation.isPending ? "INGESTING..." : "INGEST & CUT 9:16"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Niche Filter Pills */}
+              <div className="flex items-center gap-2 font-mono text-xs">
+                <span className="text-gray-500 text-[10px] uppercase">NICHE FILTER:</span>
+                {["tech", "business", "curiosity", "lifestyle", "entertainment"].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setVaultNiche(n)}
+                    className={cn(
+                      "rounded-lg px-3 py-1 text-[11px] font-mono capitalize transition-colors border",
+                      vaultNiche === n
+                        ? "bg-hive/20 border-hive text-hive font-semibold"
+                        : "border-border text-gray-400 hover:text-gray-200"
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+
+              {/* Vault Assets Grid */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between font-mono text-xs text-gray-400">
+                  <span>PRE-CACHED 9:16 VERTICAL ASSETS ({vaultAssets.length})</span>
+                  {isFetchingVault && <span className="text-hive flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Updating vault...</span>}
+                </div>
+
+                {vaultAssets.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-8 text-center space-y-2">
+                    <p className="text-xs text-gray-400">No pre-cached assets found in vault for niche "{vaultNiche}".</p>
+                    <p className="text-[11px] text-gray-500">
+                      Click <strong>"HARVEST STOCK BATCH"</strong> above or paste a video URL to automatically ingest clips!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                    {vaultAssets.map((asset) => (
+                      <div key={asset.asset_id} className="rounded-lg border border-border bg-surface-deep overflow-hidden group">
+                        <div className="aspect-[9/16] relative bg-black">
+                          {asset.thumbnail_url ? (
+                            <img src={asset.thumbnail_url} alt={asset.filename} className="w-full h-full object-cover" />
+                          ) : (
+                            <video src={asset.relative_url} className="w-full h-full object-cover" />
+                          )}
+                          <div className="absolute top-2 left-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] text-white">
+                            {asset.duration_sec}s
+                          </div>
+                          <div className="absolute top-2 right-2 rounded bg-hive/90 px-1.5 py-0.5 font-mono text-[8px] text-black font-bold uppercase">
+                            {asset.source}
+                          </div>
+                        </div>
+                        <div className="p-2 space-y-1">
+                          <div className="font-mono text-[10px] text-gray-300 truncate">{asset.filename}</div>
+                          <div className="flex flex-wrap gap-1">
+                            {asset.tags.slice(0, 3).map((t, idx) => (
+                              <span key={idx} className="rounded bg-surface px-1.5 py-0.2 text-[8px] text-gray-400 font-mono">
+                                #{t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Rendered Production History */}
+              <div className="pt-4 border-t border-border space-y-3">
+                <div className="font-mono text-xs font-semibold text-gray-300">
+                  RENDERED SHORT-FORM PRODUCTION HISTORY ({library.length})
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                  {library.map((item) => (
+                    <div key={item.blueprint_id} className="rounded-lg border border-border bg-surface-deep p-3 flex items-center justify-between">
+                      <div className="truncate mr-2">
+                        <div className="font-mono text-xs text-gray-200 truncate">{item.filename}</div>
+                        <div className="font-mono text-[10px] text-gray-500">{item.size_mb} MB • {new Date(item.created_at).toLocaleTimeString()}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <a
+                          href={item.video_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded p-1.5 text-gray-400 hover:text-hive hover:bg-surface"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink size={13} />
+                        </a>
+                        <a
+                          href={item.video_url}
+                          download={item.filename}
+                          className="rounded p-1.5 text-gray-400 hover:text-hive hover:bg-surface"
+                          title="Download MP4"
+                        >
+                          <Download size={13} />
+                        </a>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>

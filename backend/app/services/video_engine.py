@@ -24,6 +24,7 @@ The rendering pipeline (FFmpeg/moviepy) is a separate concern — this engine
 produces the BLUEPRINT that the renderer consumes.
 """
 
+import re
 import json
 import uuid
 from datetime import datetime, timezone
@@ -149,10 +150,52 @@ BRAND_IDENTITIES: dict[str, BrandIdentity] = {
 
 
 # ---------------------------------------------------------------------------
-# RETENTION-OPTIMIZED SCENE TEMPLATES
+# KEYWORD EXTRACTION & RETENTION-OPTIMIZED SCENE TEMPLATES
 # ---------------------------------------------------------------------------
 
-def build_scene_graph_template(title: str, hook_text: str, body_points: List[str], cta_text: str) -> List[SceneNode]:
+STOPWORDS = {
+    "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are",
+    "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but",
+    "by", "could", "did", "do", "does", "doing", "down", "during", "each", "few", "for", "from",
+    "further", "had", "has", "have", "having", "he", "her", "here", "hers", "herself", "him",
+    "himself", "his", "how", "i", "if", "in", "into", "is", "it", "its", "itself", "just",
+    "me", "more", "most", "my", "myself", "no", "nor", "not", "now", "of", "off", "on", "once",
+    "only", "or", "other", "our", "ours", "ourselves", "out", "over", "own", "same", "she",
+    "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them",
+    "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too",
+    "under", "until", "up", "very", "was", "we", "were", "what", "when", "where", "which",
+    "while", "who", "whom", "why", "with", "would", "you", "your", "yours", "yourself", "yourselves",
+    "officially", "actually", "basically", "literally", "simply", "really", "heres", "today",
+    "versus", "vs", "new", "dont", "cant", "wont", "everyone", "wrong", "everything"
+}
+
+
+def extract_visual_keywords(text: str, fallback_niche: str = "", max_keywords: int = 3) -> List[str]:
+    """Extract clean, stopword-free visual search keywords suitable for stock media lookups."""
+    cleaned = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
+    tokens = [w.lower().strip() for w in cleaned.split()]
+    meaningful = [w for w in tokens if len(w) > 2 and w not in STOPWORDS]
+
+    niche_fallbacks = {
+        "lifestyle": ["fashion", "runway", "model", "streetwear"],
+        "tech": ["technology", "coding", "software", "future"],
+        "business": ["business", "finance", "startup", "office"],
+        "entertainment": ["entertainment", "cinema", "music", "celebrity"],
+        "education": ["science", "learning", "books", "research"],
+        "curiosity": ["space", "astronomy", "universe", "nature"],
+    }
+    fallback = niche_fallbacks.get(fallback_niche, ["fashion", "modern", "aesthetic", "creative"])
+    combined = meaningful + [w for w in fallback if w not in meaningful]
+    return combined[:max_keywords]
+
+
+def build_scene_graph_template(
+    title: str,
+    hook_text: str,
+    body_points: List[str],
+    cta_text: str,
+    worker_id: str = "",
+) -> List[SceneNode]:
     """Generate a retention-optimized scene graph from structured content points.
     
     This implements the proven short-form retention curve:
@@ -162,6 +205,7 @@ def build_scene_graph_template(title: str, hook_text: str, body_points: List[str
     - Scene 7-8 (25s+): CLOSE zone — payoff + conversion CTA
     """
     scenes: List[SceneNode] = []
+    hook_keywords = extract_visual_keywords(f"{title} {hook_text}", fallback_niche=worker_id, max_keywords=3)
 
     # SCENE 1: THE HOOK (0-2.5s) — Critical retention zone
     scenes.append(SceneNode(
@@ -171,8 +215,8 @@ def build_scene_graph_template(title: str, hook_text: str, body_points: List[str
         duration_seconds=2.5,
         visual=VisualDirective(
             description="Rapid kinetic text animation of the core claim, zooming into frame",
-            visual_type="kinetic_typography",
-            search_keywords=[],
+            visual_type="b_roll",
+            search_keywords=hook_keywords,
             camera_motion="slow_zoom_in",
             color_mood="high_contrast",
         ),
@@ -198,9 +242,9 @@ def build_scene_graph_template(title: str, hook_text: str, body_points: List[str
         visual=VisualDirective(
             description="Dramatic b-roll establishing the topic context with subtle camera movement",
             visual_type="b_roll",
-            search_keywords=title.lower().split()[:3],
+            search_keywords=extract_visual_keywords(title, fallback_niche=worker_id, max_keywords=3),
             visual_metaphor="unveiling hidden truth",
-            camera_motion="slow_zoom_in",
+            camera_motion="pan_left",
             color_mood="desaturated",
         ),
         audio=AudioDirective(
@@ -215,8 +259,10 @@ def build_scene_graph_template(title: str, hook_text: str, body_points: List[str
     ))
 
     # SCENES 3-N: CORE VALUE DELIVERY — Each body point becomes a scene
+    core_motions = ["slow_zoom_out", "pan_right", "ken_burns", "slow_zoom_in"]
     for i, point in enumerate(body_points[:4]):
         beat = EmotionalBeat.revelation if i == 0 else EmotionalBeat.escalation
+        motion = core_motions[i % len(core_motions)]
         scenes.append(SceneNode(
             scene_id=f"s{i+3:02d}-core-{i+1}",
             emotional_beat=beat,
@@ -225,8 +271,8 @@ def build_scene_graph_template(title: str, hook_text: str, body_points: List[str
             visual=VisualDirective(
                 description=f"Visual evidence or example illustrating: {point[:60]}",
                 visual_type="b_roll" if i % 2 == 0 else "split_screen",
-                search_keywords=point.lower().split()[:4],
-                camera_motion="ken_burns" if i % 2 == 0 else "slow_zoom_out",
+                search_keywords=extract_visual_keywords(f"{point} {title}", fallback_niche=worker_id, max_keywords=3),
+                camera_motion=motion,
                 color_mood="warm" if i % 2 == 0 else "cool",
             ),
             audio=AudioDirective(
@@ -249,7 +295,7 @@ def build_scene_graph_template(title: str, hook_text: str, body_points: List[str
         visual=VisualDirective(
             description="Satisfying summary visual — chart, transformation, or before/after",
             visual_type="text_overlay",
-            search_keywords=["success", "result", "achievement"],
+            search_keywords=extract_visual_keywords(f"{title} success transformation", fallback_niche=worker_id, max_keywords=3),
             camera_motion="slow_zoom_out",
             color_mood="warm",
         ),
@@ -272,8 +318,8 @@ def build_scene_graph_template(title: str, hook_text: str, body_points: List[str
         visual=VisualDirective(
             description="Brand outro card with follow CTA and next-video tease",
             visual_type="text_overlay",
-            search_keywords=[],
-            camera_motion="static",
+            search_keywords=extract_visual_keywords(f"{title} community follow", fallback_niche=worker_id, max_keywords=3),
+            camera_motion="ken_burns",
         ),
         audio=AudioDirective(
             voiceover_text=cta_text,
@@ -445,6 +491,7 @@ class VideoIntelligenceEngine:
             hook_text=hook_text,
             body_points=body_points,
             cta_text=cta_text,
+            worker_id=worker_id,
         )
         total_duration = sum(s.duration_seconds for s in scenes)
 
@@ -458,7 +505,7 @@ class VideoIntelligenceEngine:
             subtext=f"by {brand.brand_name}",
             emotion="shock" if "wrong" in hook_text.lower() or "stop" in hook_text.lower() else "curiosity",
             layout="split_diagonal",
-            background_image_keywords=trend_title.lower().split()[:3],
+            background_image_keywords=extract_visual_keywords(trend_title, fallback_niche=worker_id, max_keywords=3),
             arrow_or_circle=True,
         )
 

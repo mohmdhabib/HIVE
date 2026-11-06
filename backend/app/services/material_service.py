@@ -36,11 +36,66 @@ class MaterialService:
 
         self.materials_dir = os.path.join(self.storage_dir, "materials")
         self.downloads_dir = os.path.join(self.materials_dir, "downloads")
+        self.stock_images_dir = os.path.join(self.materials_dir, "stock_images")
         self.temp_dir = os.path.join(self.storage_dir, "temporary")
 
         os.makedirs(self.materials_dir, exist_ok=True)
         os.makedirs(self.downloads_dir, exist_ok=True)
+        os.makedirs(self.stock_images_dir, exist_ok=True)
         os.makedirs(self.temp_dir, exist_ok=True)
+
+    def fetch_unsplash_stock_photo(
+        self,
+        keywords: List[str],
+        access_key: Optional[str] = None,
+        orientation: str = "portrait",
+    ) -> Optional[str]:
+        """Queries the Unsplash API for real, ultra-high-definition vertical photography matching keywords."""
+        key = access_key or os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
+        if not key:
+            try:
+                from app.config import get_settings
+                key = get_settings().unsplash_access_key
+            except Exception:
+                pass
+
+        if not key or not keywords:
+            return None
+
+        # Clean and join keywords
+        clean_kw = [k.replace('"', '').replace("'", '').strip() for k in keywords if len(k) > 1]
+        query = urllib.parse.quote(" ".join(clean_kw[:4]))
+        url = f"https://api.unsplash.com/search/photos?query={query}&orientation={orientation}&per_page=4"
+
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"Authorization": f"Client-ID {key}", "User-Agent": "HIVE-VideoEngine/2.0"}
+            )
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                results = data.get("results", [])
+                if not results:
+                    return None
+
+                first_photo = results[0]
+                urls = first_photo.get("urls", {})
+                img_url = urls.get("regular") or urls.get("full") or urls.get("small")
+                if img_url:
+                    photo_id = first_photo.get("id", "photo")
+                    dest_path = os.path.join(self.downloads_dir, f"unsplash_{photo_id}.jpg")
+                    if not os.path.exists(dest_path):
+                        logger.info("Downloading real Unsplash photo: %s", first_photo.get("id"))
+                        dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-VideoEngine/2.0"})
+                        with urllib.request.urlopen(dl_req, timeout=6.0) as dl_resp:
+                            with open(dest_path, "wb") as f:
+                                f.write(dl_resp.read())
+                    return dest_path
+
+        except Exception as e:
+            logger.debug("Unsplash fetch skipped or unavailable: %s", e)
+
+        return None
 
     def fetch_pexels_stock_video(
         self,
@@ -64,10 +119,8 @@ class MaterialService:
                 if not videos:
                     return None
 
-                # Find best HD portrait video file
                 first_video = videos[0]
                 video_files = first_video.get("video_files", [])
-                # Prefer 1080x1920 or 720x1280
                 target_file = None
                 for vf in video_files:
                     if vf.get("width", 0) <= vf.get("height", 0):  # Vertical
@@ -89,6 +142,87 @@ class MaterialService:
 
         return None
 
+    def fetch_commons_stock_image(self, keywords: List[str]) -> Optional[str]:
+        """Queries Wikimedia Commons for public domain stock photos matching scene keywords (100% free, no API key)."""
+        if not keywords:
+            return None
+
+        query = " ".join(keywords[:3]).replace('"', '').strip()
+        safe_query = urllib.parse.quote(f"{query} filetype:bitmap")
+        url = (
+            f"https://commons.wikimedia.org/w/api.php?action=query&generator=search"
+            f"&gsrsearch={safe_query}&gsrnamespace=6&gsrlimit=3&prop=imageinfo&iiprop=url|size&format=json"
+        )
+
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "HIVE-Agent/1.0 (contact@hive-media.local)"})
+            with urllib.request.urlopen(req, timeout=3.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                pages = data.get("query", {}).get("pages", {})
+                for _, page in pages.items():
+                    ii_list = page.get("imageinfo", [])
+                    if ii_list:
+                        img_url = ii_list[0].get("url")
+                        if img_url and any(img_url.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png")):
+                            fname = f"commons_{abs(hash(img_url)) % 10000000}.jpg"
+                            dest = os.path.join(self.downloads_dir, fname)
+                            if not os.path.exists(dest):
+                                dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-Agent/1.0 (contact@hive-media.local)"})
+                                with urllib.request.urlopen(dl_req, timeout=4.0) as dl_resp:
+                                    with open(dest, "wb") as f:
+                                        f.write(dl_resp.read())
+                            return dest
+        except Exception as e:
+            logger.debug("Wikimedia stock fetch error: %s", e)
+
+        return None
+
+    def convert_image_to_motion_video(
+        self,
+        image_path: str,
+        duration_sec: float,
+        output_path: str,
+        motion_type: str = "zoom_in",
+    ) -> bool:
+        """Converts any real stock image into a smooth, cinematic 1080x1920 30FPS Ken Burns video clip with dynamic camera motion."""
+        ffmpeg_bin = get_ffmpeg_binary()
+        fps = 30
+        frames_needed = max(30, int(duration_sec * fps))
+
+        motion_filters = {
+            "zoom_in": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0018,1.30)':d={frames_needed}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+            "slow_zoom_in": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0015,1.25)':d={frames_needed}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+            "pan_left": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='1.20':d={frames_needed}:x='(iw-iw/zoom)*(1-on/{frames_needed})':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+            "zoom_out": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='max(1.25-0.0015*on,1.0)':d={frames_needed}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+            "slow_zoom_out": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='max(1.25-0.0015*on,1.0)':d={frames_needed}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+            "pan_right": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='1.20':d={frames_needed}:x='(iw-iw/zoom)*(on/{frames_needed})':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+            "diagonal_drift": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0012,1.22)':d={frames_needed}:x='(iw-iw/zoom)*(0.2+0.6*(on/{frames_needed}))':y='(ih-ih/zoom)*(0.2+0.6*(on/{frames_needed}))':s=1080x1920:fps={fps}",
+            "dramatic_zoom_in": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0012,1.18)':d={frames_needed}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+            "pulse_zoom": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0022,1.28)':d={frames_needed}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+            "ken_burns": f"scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0015,1.25)':d={frames_needed}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1080x1920:fps={fps}",
+        }
+
+        vf = motion_filters.get(motion_type, motion_filters["zoom_in"])
+
+        try:
+            cmd = [
+                ffmpeg_bin, "-y",
+                "-loop", "1",
+                "-i", image_path,
+                "-vf", vf,
+                "-t", str(duration_sec),
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p",
+                "-an",
+                output_path,
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            return os.path.exists(output_path) and os.path.getsize(output_path) > 1000
+        except Exception as e:
+            logger.debug("Failed Ken Burns conversion: %s", e)
+            return False
+
     def get_scene_footage(
         self,
         keywords: List[str],
@@ -97,11 +231,52 @@ class MaterialService:
         duration_sec: float,
         output_path: str,
         brand_color: str = "#00d4ff",
+        scene_idx: int = 0,
+        camera_motion: str = "",
     ) -> str:
-        """Retrieves real stock video, niche background loop, or renders procedural kinetic footage."""
+        """Retrieves real stock video, downloads real stock photos with Ken Burns motion, or picks local assets."""
         ffmpeg_bin = get_ffmpeg_binary()
 
-        # 1. Attempt Pexels Stock Video API
+        # Motion cadence: alternates across scenes for dynamic retention flow
+        motion_sequence = ["zoom_in", "pan_left", "zoom_out", "pan_right", "diagonal_drift", "dramatic_zoom_in", "pulse_zoom"]
+        effective_motion = camera_motion if camera_motion else motion_sequence[scene_idx % len(motion_sequence)]
+
+        # Tier 0: Check Pre-Harvested Media Vault (Instant Local Hit)
+        try:
+            from app.services.media_harvester import media_harvester
+            vault_match = media_harvester.find_matching_footage(niche=worker_id, keywords=keywords)
+            if vault_match and os.path.exists(vault_match):
+                # If image in vault, animate it with Ken Burns
+                if vault_match.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                    if self.convert_image_to_motion_video(vault_match, duration_sec, output_path, motion_type=effective_motion):
+                        logger.info("Using vault image with %s motion: %s", effective_motion, vault_match)
+                        return output_path
+                else:
+                    cmd = [
+                        ffmpeg_bin, "-y",
+                        "-stream_loop", "-1",
+                        "-i", vault_match,
+                        "-t", str(duration_sec),
+                        "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",
+                        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                        "-an",
+                        output_path,
+                    ]
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                        logger.info("Using pre-harvested vault footage: %s", vault_match)
+                        return output_path
+        except Exception as e:
+            logger.debug("Vault lookup skipped: %s", e)
+
+        # Tier 1: Real Unsplash Stock Photography API (Priority 1)
+        unsplash_img = self.fetch_unsplash_stock_photo(keywords=keywords)
+        if unsplash_img and os.path.exists(unsplash_img):
+            if self.convert_image_to_motion_video(unsplash_img, duration_sec, output_path, motion_type=effective_motion):
+                logger.info("Using real Unsplash HD stock photo with %s motion: %s", effective_motion, unsplash_img)
+                return output_path
+
+        # Tier 2: Real Pexels Stock Video API
         stock_path = self.fetch_pexels_stock_video(keywords=keywords, duration_needed=duration_sec)
         if stock_path and os.path.exists(stock_path):
             try:
@@ -117,20 +292,75 @@ class MaterialService:
                 ]
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                    logger.info("Using real Pexels stock video: %s", stock_path)
                     return output_path
             except Exception as e:
                 logger.debug("Failed trimming stock footage: %s", e)
 
-        # 2. Check for local niche video footage in storage/materials/
-        niche_names = [f"{worker_id}_loop.mp4", "tech_loop.mp4", "business_loop.mp4", "lifestyle_loop.mp4"]
-        for n_file in niche_names:
-            local_clip = os.path.join(self.materials_dir, n_file)
-            if os.path.exists(local_clip) and os.path.getsize(local_clip) > 50000:
+        # Tier 3: Real Wikimedia Commons Stock Photo with Ken Burns Camera Motion
+        commons_img = self.fetch_commons_stock_image(keywords=keywords)
+        if commons_img and os.path.exists(commons_img):
+            if self.convert_image_to_motion_video(commons_img, duration_sec, output_path, motion_type=effective_motion):
+                logger.info("Using real Wikimedia stock image with %s motion: %s", effective_motion, commons_img)
+                return output_path
+
+        # Tier 4: Curated Real Stock Asset Bank (niche-curated photos & videos on disk)
+        curated_map = {
+            "tech": [
+                ("programmer_work.mp4", "video"),
+                ("tech_coding.jpg", "image"),
+                ("server_room.jpg", "image"),
+                ("programmer_work.jpg", "image"),
+            ],
+            "business": [
+                ("business_office.jpg", "image"),
+                ("finance_chart.jpg", "image"),
+                ("business_meeting.jpg", "image"),
+                ("business_startup.jpg", "image"),
+            ],
+            "curiosity": [
+                ("space_nebula.jpg", "image"),
+                ("education_library.jpg", "image"),
+                ("education_science.jpg", "image"),
+            ],
+            "education": [
+                ("education_library.jpg", "image"),
+                ("education_science.jpg", "image"),
+                ("space_nebula.jpg", "image"),
+            ],
+            "entertainment": [
+                ("concert_stage.jpg", "image"),
+                ("entertainment_cinema.jpg", "image"),
+                ("entertainment_music.jpg", "image"),
+            ],
+            "lifestyle": [
+                ("fashion_runway.jpg", "image"),
+                ("fashion_streetwear.jpg", "image"),
+                ("fashion_luxury.jpg", "image"),
+                ("fashion_cyberpunk.jpg", "image"),
+                ("fashion_couture.jpg", "image"),
+                ("fashion_accessories.jpg", "image"),
+            ],
+        }
+
+        assets = curated_map.get(worker_id, curated_map.get("lifestyle", curated_map["tech"]))
+        chosen_asset, asset_type = assets[scene_idx % len(assets)]
+        asset_path = os.path.join(self.stock_images_dir, chosen_asset)
+
+        if not os.path.exists(asset_path):
+            asset_path = os.path.join(self.materials_dir, chosen_asset)
+
+        if os.path.exists(asset_path) and os.path.getsize(asset_path) > 1000:
+            if asset_type == "image":
+                if self.convert_image_to_motion_video(asset_path, duration_sec, output_path, motion_type=effective_motion):
+                    logger.info("Using curated real stock photo with %s motion: %s", effective_motion, asset_path)
+                    return output_path
+            elif asset_type == "video":
                 try:
                     cmd = [
                         ffmpeg_bin, "-y",
                         "-stream_loop", "-1",
-                        "-i", local_clip,
+                        "-i", asset_path,
                         "-t", str(duration_sec),
                         "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",
                         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
@@ -139,11 +369,12 @@ class MaterialService:
                     ]
                     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                     if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                        logger.info("Using curated real stock video: %s", asset_path)
                         return output_path
                 except Exception as e:
-                    logger.debug("Failed trimming local niche clip: %s", e)
+                    logger.debug("Failed trimming curated video: %s", e)
 
-        # 3. Fallback: Generate real procedural kinetic motion video
+        # Tier 5: Fallback to procedural kinetic motion video
         return self.generate_procedural_motion_video(
             scene_type=scene_type,
             duration_sec=duration_sec,

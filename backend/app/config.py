@@ -24,7 +24,12 @@ class Settings(BaseSettings):
     # Security
     global_kill_switch: bool = False
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # Media & Stock APIs
+    unsplash_access_key: str = ""
+    unsplash_secret_key: str = ""
+    pexels_api_key: str = ""
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 @lru_cache
 def get_settings() -> Settings:

@@ -4,13 +4,20 @@ import subprocess
 import wave
 import struct
 import math
+import json
 import threading
 import asyncio
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from PIL import Image, ImageDraw, ImageFont
 
-from app.schemas.video import VideoProductionBlueprint, RenderJobStatus, SceneNode
+from app.schemas.video import (
+    VideoProductionBlueprint,
+    RenderJobStatus,
+    SceneNode,
+    SceneClipArtifact,
+    SceneUpdateRequest,
+)
 from app.workers.registry import get_worker
 from app.services.material_service import material_service
 from app.services.voice_service import voice_service
@@ -45,12 +52,15 @@ class VideoRenderService:
         self.video_dir = os.path.join(self.storage_dir, "videos")
         self.image_dir = os.path.join(self.storage_dir, "images")
         self.temp_dir = os.path.join(self.storage_dir, "temporary")
+        self.clips_dir = os.path.join(self.storage_dir, "clips")
 
         os.makedirs(self.video_dir, exist_ok=True)
         os.makedirs(self.image_dir, exist_ok=True)
         os.makedirs(self.temp_dir, exist_ok=True)
+        os.makedirs(self.clips_dir, exist_ok=True)
 
         self.jobs: Dict[str, RenderJobStatus] = {}
+        self.blueprints: Dict[str, VideoProductionBlueprint] = {}
 
     def get_job(self, job_or_blueprint_id: str) -> Optional[RenderJobStatus]:
         if job_or_blueprint_id in self.jobs:
@@ -69,9 +79,11 @@ class VideoRenderService:
             status="queued",
             progress_pct=5.0,
             current_step="Queued for automated video composition",
+            scene_clips=[],
         )
         self.jobs[job_id] = job
         self.jobs[blueprint.blueprint_id] = job
+        self.blueprints[blueprint.blueprint_id] = blueprint
         return job
 
     def list_rendered_videos(self) -> List[Dict]:
@@ -228,41 +240,59 @@ class VideoRenderService:
         draw.ellipse([82, 102, 94, 114], fill=(*p_rgb, 255))
         draw.text((106, 95), brand_label[:18], font=badge_font, fill=(255, 255, 255, 235))
 
-        # 2. Viral Short-Form Captions (Centered Lower-Third, Impact/Arial Bold, thick outline, word highlights)
-        caption_font = self._get_font(74)
+        # 2. Viral Short-Form Captions (Centered in Frame, Impact/Arial Bold, Pill Contrast, Word Highlights)
         words = scene.audio.voiceover_text.split()
         if not words:
             words = ["HIVE", "AUTONOMOUS", "MEDIA"]
 
-        # Break into 2 punchy lines maximum (3-5 words each)
-        half = max(1, len(words) // 2)
-        if len(words) > 5:
-            line_a = " ".join(words[:half]).upper()
-            line_b = " ".join(words[half:half*2]).upper()
-            lines = [line_a, line_b]
-        else:
-            lines = [" ".join(words).upper()]
+        # Break into punchy 2-4 word lines (max 20 chars per line), preserving all words without truncation
+        lines = []
+        curr = []
+        for w in words:
+            cand = " ".join(curr + [w])
+            if len(cand) > 20 and len(curr) >= 2:
+                lines.append(" ".join(curr).upper())
+                curr = [w]
+            else:
+                curr.append(w)
+        if curr:
+            lines.append(" ".join(curr).upper())
+
+        caption_font_size = 72 if len(lines) <= 3 else 62
+        line_height = 86 if len(lines) <= 3 else 74
+        caption_font = self._get_font(caption_font_size)
 
         # Identify highlight keywords
         emphasis_words = set(w.upper().strip(".,!?\"'") for w in scene.audio.voiceover_emphasis) if scene.audio.voiceover_emphasis else set()
 
-        y_start = 1320 if len(lines) == 2 else 1360
+        total_text_h = len(lines) * line_height
+        # Position centered in the video frame (focal eye-level sweet spot)
+        y_start = (height - total_text_h) // 2
         y = y_start
 
-        for line in lines:
-            bbox = draw.textbbox((0, 0), line, font=caption_font, stroke_width=6)
-            w = bbox[2] - bbox[0]
-            x = (width - w) // 2
+        for idx, line in enumerate(lines):
+            bbox = draw.textbbox((0, 0), line, font=caption_font, stroke_width=7)
+            line_w = bbox[2] - bbox[0]
+            x = (width - line_w) // 2
 
             # Check if any word in this line is an active highlight
-            line_has_emphasis = any(w in emphasis_words for w in line.split()) or (scene_idx == 0 and ("STOP" in line or "AI" in line or "2023" in line))
+            line_has_emphasis = any(w in emphasis_words for w in line.split()) or (scene_idx == 0 and idx == 0)
             highlight_color = (255, 235, 59, 255) if line_has_emphasis else (255, 255, 255, 255)
 
+            # High-contrast backdrop pill for readability over any footage
+            pill_pad_x = 24
+            pill_pad_y = 6
+            draw.rounded_rectangle(
+                [x - pill_pad_x, y - pill_pad_y, x + line_w + pill_pad_x, y + line_height - 12],
+                radius=18,
+                fill=(8, 10, 16, 175),
+            )
+
             # Drop shadow
-            draw.text((x + 4, y + 5), line, font=caption_font, fill=(0, 0, 0, 190))
+            draw.text((x + 3, y + 4), line, font=caption_font, fill=(0, 0, 0, 220))
             # Main bold text with thick black outline
-            draw.text((x, y), line, font=caption_font, fill=highlight_color, stroke_width=7, stroke_fill=(12, 12, 14, 255))
-            y += 92
+            draw.text((x, y), line, font=caption_font, fill=highlight_color, stroke_width=7, stroke_fill=(10, 10, 12, 255))
+            y += line_height
 
         img.save(output_path, "PNG")
 
@@ -322,7 +352,8 @@ class VideoRenderService:
         blueprint: VideoProductionBlueprint,
         job_id: Optional[str] = None,
     ) -> RenderJobStatus:
-        """Executes full end-to-end video assembly with real motion video footage, audio mixing, and subtitles."""
+        """Executes full end-to-end video assembly with real motion video footage, audio mixing, subtitles,
+        and saves individual scene clips for preview and visual editing."""
         target_job_id = job_id or f"job-{blueprint.blueprint_id}"
         ffmpeg_bin = get_ffmpeg_binary()
 
@@ -330,24 +361,35 @@ class VideoRenderService:
         if not job:
             job = self.create_job(blueprint)
 
+        # Permanent per-blueprint clip directory
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint.blueprint_id)
+        os.makedirs(bp_clips_dir, exist_ok=True)
+        try:
+            with open(os.path.join(bp_clips_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+                f.write(blueprint.model_dump_json(indent=2))
+        except Exception as e:
+            logger.debug("Failed caching blueprint json: %s", e)
+
         try:
             logger.info("Initiating video render for blueprint '%s'", blueprint.blueprint_id)
             total_scenes = len(blueprint.scenes)
             scene_video_paths = []
+            job.scene_clips = []
 
             # Step 1: For each scene, render real motion footage + voice cadence + ambient BGM + subtitle overlay
             for idx, scene in enumerate(blueprint.scenes):
                 job.status = "generating_tts"
-                job.progress_pct = 10.0 + (idx / total_scenes) * 35.0
+                job.progress_pct = 10.0 + (idx / total_scenes) * 70.0
                 job.current_step = f"Compositing moving video footage for Scene {idx + 1}/{total_scenes}: {scene.emotional_beat.value.upper()}"
 
                 duration = max(3.0, scene.duration_seconds)
                 scene_bg_video = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{idx}_motion.mp4")
-                scene_overlay = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{idx}_overlay.png")
-                scene_voice = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{idx}_voice.wav")
+                scene_overlay = os.path.join(bp_clips_dir, f"scene_{idx}_overlay.png")
+                scene_voice = os.path.join(bp_clips_dir, f"scene_{idx}_voice.wav")
                 scene_bgm = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{idx}_bgm.wav")
                 scene_audio_mixed = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{idx}_mixed.wav")
-                scene_mp4 = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{idx}.mp4")
+                scene_mp4 = os.path.join(bp_clips_dir, f"scene_{idx}.mp4")
+                scene_thumb = os.path.join(bp_clips_dir, f"scene_{idx}_thumb.jpg")
 
                 # Step A: Obtain real stock video, niche background loop, or kinetic motion footage
                 material_service.get_scene_footage(
@@ -357,6 +399,8 @@ class VideoRenderService:
                     duration_sec=duration,
                     output_path=scene_bg_video,
                     brand_color=blueprint.brand.colors.primary,
+                    scene_idx=idx,
+                    camera_motion=scene.visual.camera_motion,
                 )
 
                 # Step B: Render transparent subtitle and HUD overlay
@@ -403,7 +447,6 @@ class VideoRenderService:
 
                 # Step D: Composite moving video + subtitle overlay + mixed audio into final scene MP4
                 job.status = "compositing"
-                job.progress_pct = 45.0 + (idx / total_scenes) * 35.0
                 job.current_step = f"Burning animated subtitles & audio into Scene {idx + 1}/{total_scenes}"
 
                 comp_cmd = [
@@ -424,6 +467,35 @@ class VideoRenderService:
                 ]
                 subprocess.run(comp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
                 scene_video_paths.append(scene_mp4)
+
+                # Extract individual scene thumbnail
+                thumb_cmd = [
+                    ffmpeg_bin, "-y",
+                    "-ss", "00:00:00.6",
+                    "-i", scene_mp4,
+                    "-vframes", "1",
+                    "-q:v", "2",
+                    scene_thumb,
+                ]
+                subprocess.run(thumb_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+                # Record individual scene clip artifact
+                clip_artifact = SceneClipArtifact(
+                    scene_idx=idx,
+                    scene_id=scene.scene_id,
+                    emotional_beat=scene.emotional_beat.value,
+                    duration_seconds=round(duration, 1),
+                    clip_path=f"/storage/clips/{blueprint.blueprint_id}/scene_{idx}.mp4",
+                    thumbnail_path=f"/storage/clips/{blueprint.blueprint_id}/scene_{idx}_thumb.jpg" if os.path.exists(scene_thumb) else None,
+                    overlay_path=f"/storage/clips/{blueprint.blueprint_id}/scene_{idx}_overlay.png" if os.path.exists(scene_overlay) else None,
+                    voice_path=f"/storage/clips/{blueprint.blueprint_id}/scene_{idx}_voice.wav" if os.path.exists(scene_voice) else None,
+                    voiceover_text=scene.audio.voiceover_text,
+                    camera_motion=scene.visual.camera_motion,
+                    search_keywords=scene.visual.search_keywords,
+                    source_asset=scene.visual.description,
+                    status="ready",
+                )
+                job.scene_clips.append(clip_artifact)
 
             # Step 2: Concatenate Scene Clips into Final MP4
             job.status = "encoding"
@@ -474,7 +546,7 @@ class VideoRenderService:
             job.duration_seconds = round(total_duration, 1)
             job.file_size_mb = size_mb
 
-            logger.info("Video successfully rendered! Output: %s (%.2f MB, %.1fs)", final_mp4, size_mb, total_duration)
+            logger.info("Video successfully rendered! Output: %s (%.2f MB, %.1fs, %d scene clips)", final_mp4, size_mb, total_duration, len(job.scene_clips))
 
         except Exception as e:
             logger.exception("Video rendering failed for blueprint '%s'", blueprint.blueprint_id)
@@ -483,6 +555,275 @@ class VideoRenderService:
             job.error_message = str(e)
 
         return job
+
+    def render_single_scene(
+        self,
+        blueprint_id: str,
+        scene_idx: int,
+        update: SceneUpdateRequest,
+    ) -> RenderJobStatus:
+        """Regenerates a single scene clip with updated text, keywords, motion, or custom asset,
+        and re-stitches the master video."""
+        blueprint = self.blueprints.get(blueprint_id)
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
+
+        if not blueprint and os.path.exists(os.path.join(bp_clips_dir, "blueprint.json")):
+            try:
+                with open(os.path.join(bp_clips_dir, "blueprint.json"), "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    blueprint = VideoProductionBlueprint(**data)
+                    self.blueprints[blueprint_id] = blueprint
+            except Exception as e:
+                logger.error("Failed loading cached blueprint: %s", e)
+
+        if not blueprint:
+            raise ValueError(f"Blueprint '{blueprint_id}' not found")
+
+        if scene_idx < 0 or scene_idx >= len(blueprint.scenes):
+            raise ValueError(f"Scene index {scene_idx} out of range (0-{len(blueprint.scenes)-1})")
+
+        scene = blueprint.scenes[scene_idx]
+        job = self.get_job(blueprint_id)
+        if not job:
+            job = self.create_job(blueprint)
+
+        # Apply updates
+        if update.voiceover_text is not None and update.voiceover_text.strip():
+            scene.audio.voiceover_text = update.voiceover_text.strip()
+        if update.search_keywords is not None and len(update.search_keywords) > 0:
+            scene.visual.search_keywords = update.search_keywords
+        if update.camera_motion is not None and update.camera_motion.strip():
+            scene.visual.camera_motion = update.camera_motion.strip()
+        if update.visual_description is not None and update.visual_description.strip():
+            scene.visual.description = update.visual_description.strip()
+
+        ffmpeg_bin = get_ffmpeg_binary()
+        duration = max(3.0, scene.duration_seconds)
+        os.makedirs(bp_clips_dir, exist_ok=True)
+
+        scene_bg_video = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{scene_idx}_motion.mp4")
+        scene_overlay = os.path.join(bp_clips_dir, f"scene_{scene_idx}_overlay.png")
+        scene_voice = os.path.join(bp_clips_dir, f"scene_{scene_idx}_voice.wav")
+        scene_bgm = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{scene_idx}_bgm.wav")
+        scene_audio_mixed = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{scene_idx}_mixed.wav")
+        scene_mp4 = os.path.join(bp_clips_dir, f"scene_{scene_idx}.mp4")
+        scene_thumb = os.path.join(bp_clips_dir, f"scene_{scene_idx}_thumb.jpg")
+
+        # Visual background: if custom asset provided, use it directly
+        if update.custom_asset_path and os.path.exists(update.custom_asset_path):
+            if update.custom_asset_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                material_service.convert_image_to_motion_video(
+                    update.custom_asset_path,
+                    duration,
+                    scene_bg_video,
+                    motion_type=scene.visual.camera_motion,
+                )
+            else:
+                cmd = [
+                    ffmpeg_bin, "-y",
+                    "-stream_loop", "-1",
+                    "-i", update.custom_asset_path,
+                    "-t", str(duration),
+                    "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                    "-an",
+                    scene_bg_video,
+                ]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        else:
+            material_service.get_scene_footage(
+                keywords=scene.visual.search_keywords,
+                worker_id=blueprint.worker_id,
+                scene_type=scene.emotional_beat.value,
+                duration_sec=duration,
+                output_path=scene_bg_video,
+                brand_color=blueprint.brand.colors.primary,
+                scene_idx=scene_idx,
+                camera_motion=scene.visual.camera_motion,
+            )
+
+        # Overlay & audio
+        self._render_scene_overlay(
+            scene=scene,
+            blueprint=blueprint,
+            scene_idx=scene_idx,
+            total_scenes=len(blueprint.scenes),
+            output_path=scene_overlay,
+        )
+
+        voice_service.generate_voiceover(
+            text=scene.audio.voiceover_text,
+            worker_id=blueprint.worker_id,
+            duration_sec=duration,
+            output_path=scene_voice,
+        )
+        self._generate_ambient_bgm(duration_sec=duration, output_path=scene_bgm)
+
+        sfx_path = sfx_service.get_sfx_path(scene.audio.sfx_cue)
+        if sfx_path and os.path.exists(sfx_path):
+            mix_cmd = [
+                ffmpeg_bin, "-y",
+                "-i", scene_voice,
+                "-i", scene_bgm,
+                "-i", sfx_path,
+                "-filter_complex", "[0:a]volume=1.0[v];[1:a]volume=0.18[b];[2:a]volume=0.35[s];[v][b][s]amix=inputs=3:duration=first:dropout_transition=2[a]",
+                "-map", "[a]",
+                "-c:a", "pcm_s16le",
+                scene_audio_mixed,
+            ]
+        else:
+            mix_cmd = [
+                ffmpeg_bin, "-y",
+                "-i", scene_voice,
+                "-i", scene_bgm,
+                "-filter_complex", "[0:a]volume=1.0[v];[1:a]volume=0.18[b];[v][b]amix=inputs=2:duration=first:dropout_transition=2[a]",
+                "-map", "[a]",
+                "-c:a", "pcm_s16le",
+                scene_audio_mixed,
+            ]
+        subprocess.run(mix_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+        # Composite scene
+        comp_cmd = [
+            ffmpeg_bin, "-y",
+            "-i", scene_bg_video,
+            "-i", scene_overlay,
+            "-i", scene_audio_mixed,
+            "-filter_complex", "[0:v][1:v]overlay=0:0[v]",
+            "-map", "[v]",
+            "-map", "2:a",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-shortest",
+            scene_mp4,
+        ]
+        subprocess.run(comp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+        # Extract thumb
+        thumb_cmd = [
+            ffmpeg_bin, "-y",
+            "-ss", "00:00:00.6",
+            "-i", scene_mp4,
+            "-vframes", "1",
+            "-q:v", "2",
+            scene_thumb,
+        ]
+        subprocess.run(thumb_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Update artifact
+        artifact = SceneClipArtifact(
+            scene_idx=scene_idx,
+            scene_id=scene.scene_id,
+            emotional_beat=scene.emotional_beat.value,
+            duration_seconds=round(duration, 1),
+            clip_path=f"/storage/clips/{blueprint.blueprint_id}/scene_{scene_idx}.mp4",
+            thumbnail_path=f"/storage/clips/{blueprint.blueprint_id}/scene_{scene_idx}_thumb.jpg" if os.path.exists(scene_thumb) else None,
+            overlay_path=f"/storage/clips/{blueprint.blueprint_id}/scene_{scene_idx}_overlay.png" if os.path.exists(scene_overlay) else None,
+            voice_path=f"/storage/clips/{blueprint.blueprint_id}/scene_{scene_idx}_voice.wav" if os.path.exists(scene_voice) else None,
+            voiceover_text=scene.audio.voiceover_text,
+            camera_motion=scene.visual.camera_motion,
+            search_keywords=scene.visual.search_keywords,
+            source_asset=scene.visual.description,
+            status="ready",
+        )
+
+        # Replace or append in job.scene_clips
+        existing_idx = None
+        for i, a in enumerate(job.scene_clips):
+            if a.scene_idx == scene_idx:
+                existing_idx = i
+                break
+        if existing_idx is not None:
+            job.scene_clips[existing_idx] = artifact
+        else:
+            job.scene_clips.append(artifact)
+            job.scene_clips.sort(key=lambda x: x.scene_idx)
+
+        # Re-stitch master video from all scene_{i}.mp4 files
+        all_scene_paths = []
+        for i in range(len(blueprint.scenes)):
+            spath = os.path.join(bp_clips_dir, f"scene_{i}.mp4")
+            if os.path.exists(spath):
+                all_scene_paths.append(spath)
+
+        if len(all_scene_paths) == len(blueprint.scenes):
+            concat_list = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_reconcat.txt")
+            with open(concat_list, "w", encoding="utf-8") as f:
+                for p in all_scene_paths:
+                    safe_p = p.replace("\\", "/")
+                    f.write(f"file '{safe_p}'\n")
+
+            final_mp4 = os.path.join(self.video_dir, f"{blueprint.blueprint_id}.mp4")
+            concat_cmd = [
+                ffmpeg_bin, "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concat_list,
+                "-c", "copy",
+                final_mp4,
+            ]
+            subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            if os.path.exists(final_mp4):
+                job.file_size_mb = round(os.stat(final_mp4).st_size / (1024 * 1024), 2)
+
+        # Persist updated blueprint
+        with open(os.path.join(bp_clips_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+            f.write(blueprint.model_dump_json(indent=2))
+
+        job.status = "complete"
+        job.progress_pct = 100.0
+        job.current_step = f"Scene {scene_idx + 1} updated and master video re-stitched successfully!"
+        return job
+
+    def get_scene_clips(self, blueprint_id: str) -> List[SceneClipArtifact]:
+        """Returns the list of scene clip artifacts for a blueprint."""
+        job = self.get_job(blueprint_id)
+        if job and job.scene_clips:
+            return job.scene_clips
+
+        # Inspect disk
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
+        if not os.path.exists(bp_clips_dir):
+            return []
+
+        results = []
+        blueprint = self.blueprints.get(blueprint_id)
+        if not blueprint and os.path.exists(os.path.join(bp_clips_dir, "blueprint.json")):
+            try:
+                with open(os.path.join(bp_clips_dir, "blueprint.json"), "r", encoding="utf-8") as f:
+                    blueprint = VideoProductionBlueprint(**json.load(f))
+            except Exception:
+                pass
+
+        scenes = blueprint.scenes if blueprint else []
+        for idx in range(len(scenes) if scenes else 12):
+            clip_file = os.path.join(bp_clips_dir, f"scene_{idx}.mp4")
+            if os.path.exists(clip_file):
+                scene = scenes[idx] if idx < len(scenes) else None
+                thumb_file = os.path.join(bp_clips_dir, f"scene_{idx}_thumb.jpg")
+                overlay_file = os.path.join(bp_clips_dir, f"scene_{idx}_overlay.png")
+                voice_file = os.path.join(bp_clips_dir, f"scene_{idx}_voice.wav")
+                results.append(
+                    SceneClipArtifact(
+                        scene_idx=idx,
+                        scene_id=scene.scene_id if scene else f"scene_{idx}",
+                        emotional_beat=scene.emotional_beat.value if scene else "core",
+                        duration_seconds=scene.duration_seconds if scene else 3.5,
+                        clip_path=f"/storage/clips/{blueprint_id}/scene_{idx}.mp4",
+                        thumbnail_path=f"/storage/clips/{blueprint_id}/scene_{idx}_thumb.jpg" if os.path.exists(thumb_file) else None,
+                        overlay_path=f"/storage/clips/{blueprint_id}/scene_{idx}_overlay.png" if os.path.exists(overlay_file) else None,
+                        voice_path=f"/storage/clips/{blueprint_id}/scene_{idx}_voice.wav" if os.path.exists(voice_file) else None,
+                        voiceover_text=scene.audio.voiceover_text if scene else "",
+                        camera_motion=scene.visual.camera_motion if scene else "ken_burns",
+                        search_keywords=scene.visual.search_keywords if scene else [],
+                        status="ready",
+                    )
+                )
+
+        return results
 
     def start_background_render(self, blueprint: VideoProductionBlueprint) -> RenderJobStatus:
         """Starts asynchronous background render and returns initial job object immediately."""

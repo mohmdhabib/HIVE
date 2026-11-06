@@ -230,8 +230,34 @@ class VideoProductionBlueprint(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# 10. RENDER JOB STATUS
+# 10. SCENE CLIPS & RENDER JOB STATUS
 # ---------------------------------------------------------------------------
+
+class SceneClipArtifact(BaseModel):
+    """Visual asset artifacts for an individual scene clip in the video editor."""
+    scene_idx: int
+    scene_id: str
+    emotional_beat: str
+    duration_seconds: float
+    clip_path: str
+    thumbnail_path: Optional[str] = None
+    overlay_path: Optional[str] = None
+    voice_path: Optional[str] = None
+    voiceover_text: str
+    camera_motion: str
+    search_keywords: List[str] = Field(default_factory=list)
+    source_asset: Optional[str] = None
+    status: Literal["ready", "rendering", "failed"] = "ready"
+
+
+class SceneUpdateRequest(BaseModel):
+    """Payload for editing and regenerating an individual scene clip."""
+    voiceover_text: Optional[str] = None
+    search_keywords: Optional[List[str]] = None
+    camera_motion: Optional[str] = None
+    visual_description: Optional[str] = None
+    custom_asset_path: Optional[str] = None
+
 
 class RenderJobStatus(BaseModel):
     job_id: str
@@ -245,4 +271,6 @@ class RenderJobStatus(BaseModel):
     error_message: Optional[str] = None
     duration_seconds: Optional[float] = None
     file_size_mb: Optional[float] = None
+    scene_clips: List[SceneClipArtifact] = Field(default_factory=list)
+
 

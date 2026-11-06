@@ -151,6 +151,30 @@ export interface VideoProductionBlueprint {
   created_at?: string | null;
 }
 
+export interface SceneClipArtifact {
+  scene_idx: number;
+  scene_id: string;
+  emotional_beat: string;
+  duration_seconds: number;
+  clip_path: string;
+  thumbnail_path?: string | null;
+  overlay_path?: string | null;
+  voice_path?: string | null;
+  voiceover_text: string;
+  camera_motion: string;
+  search_keywords: string[];
+  source_asset?: string | null;
+  status: "ready" | "rendering" | "failed";
+}
+
+export interface SceneUpdateRequest {
+  voiceover_text?: string;
+  search_keywords?: string[];
+  camera_motion?: string;
+  visual_description?: string;
+  custom_asset_path?: string;
+}
+
 export interface RenderJobStatus {
   job_id: string;
   blueprint_id: string;
@@ -163,6 +187,7 @@ export interface RenderJobStatus {
   error_message?: string | null;
   duration_seconds?: number | null;
   file_size_mb?: number | null;
+  scene_clips?: SceneClipArtifact[];
 }
 
 export interface RenderedVideoItem {
@@ -171,6 +196,22 @@ export interface RenderedVideoItem {
   video_url: string;
   thumbnail_url?: string | null;
   size_mb: number;
+  created_at: string;
+}
+
+export interface VaultAsset {
+  asset_id: string;
+  niche: string;
+  filename: string;
+  asset_type: "video" | "image";
+  file_path: string;
+  relative_url: string;
+  thumbnail_url?: string | null;
+  tags: string[];
+  duration_sec: number;
+  width: number;
+  height: number;
+  source: string;
   created_at: string;
 }
 
@@ -554,4 +595,25 @@ export const api = {
     }),
   renderStatus: (jobId: string) => request<RenderJobStatus>(`/video/render/${encodeURIComponent(jobId)}`),
   videoLibrary: () => request<RenderedVideoItem[]>("/video/library"),
+  vaultMaterials: (niche?: string) => {
+    const query = niche ? `?niche=${encodeURIComponent(niche)}` : "";
+    return request<VaultAsset[]>(`/materials/vault${query}`);
+  },
+  harvestUrl: (data: { url: string; niche?: string; tags?: string[] }) =>
+    request<VaultAsset[]>("/materials/harvest-url", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  harvestBatch: (data: { niche?: string; count?: number }) =>
+    request<VaultAsset[]>("/materials/harvest-batch", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  blueprintSceneClips: (blueprintId: string) =>
+    request<SceneClipArtifact[]>(`/video/blueprint/${encodeURIComponent(blueprintId)}/clips`),
+  regenerateSceneClip: (blueprintId: string, sceneIdx: number, data: SceneUpdateRequest) =>
+    request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/${sceneIdx}/render`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

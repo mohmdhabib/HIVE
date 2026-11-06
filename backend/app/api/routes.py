@@ -9,7 +9,13 @@ from app.schemas.content import TopicOpportunity, MultiFormatDeliverable
 from app.schemas.platform import PlatformType, AccountConnection, ScheduledPublication
 from app.schemas.revenue import RevenueEvent, CostEvent, WorkerProfitability, FinancialSummary, RevenueStream, AttributionType, CostType
 from app.schemas.trend import LiveTrendItem, TrendAnalysisRequest, NicheTrendDigest
-from app.schemas.video import VideoProductionBlueprint, ViralityScorecard, RenderJobStatus
+from app.schemas.video import (
+    VideoProductionBlueprint,
+    ViralityScorecard,
+    RenderJobStatus,
+    SceneClipArtifact,
+    SceneUpdateRequest,
+)
 from app.schemas.briefing import MasterExecutiveBriefing, WorkerPerformanceDigest
 from app.workers.registry import list_workers, get_worker
 from app.master.agent import delegate
@@ -246,6 +252,65 @@ async def get_render_status(job_id: str):
 @router.get("/video/library")
 async def list_video_library():
     return video_renderer.list_rendered_videos()
+
+@router.get("/video/blueprint/{blueprint_id}/clips", response_model=list[SceneClipArtifact])
+async def get_blueprint_scene_clips(blueprint_id: str):
+    return video_renderer.get_scene_clips(blueprint_id)
+
+@router.post("/video/blueprint/{blueprint_id}/scene/{scene_idx}/render", response_model=RenderJobStatus)
+async def regenerate_single_scene_endpoint(
+    blueprint_id: str,
+    scene_idx: int,
+    req: SceneUpdateRequest,
+):
+    try:
+        return video_renderer.render_single_scene(
+            blueprint_id=blueprint_id,
+            scene_idx=scene_idx,
+            update=req,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("Error regenerating scene %d for blueprint %s", scene_idx, blueprint_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+# ============================================================================
+# AUTOMATED MEDIA HARVESTER & VAULT
+# ============================================================================
+from app.services.media_harvester import media_harvester, VaultAsset, HarvestRequest
+
+class HarvestUrlRequest(BaseModel):
+    url: str
+    niche: str = "tech"
+    tags: list[str] | None = None
+
+@router.get("/materials/vault", response_model=list[VaultAsset])
+async def list_vault_materials(niche: str | None = None):
+    return media_harvester.list_vault_assets(niche=niche)
+
+@router.post("/materials/harvest-url", response_model=list[VaultAsset])
+async def harvest_from_url_endpoint(req: HarvestUrlRequest):
+    try:
+        return media_harvester.harvest_from_url(
+            url=req.url,
+            niche=req.niche,
+            custom_tags=req.tags,
+        )
+    except Exception as exc:
+        logger.exception("Error harvesting from URL")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/materials/harvest-batch", response_model=list[VaultAsset])
+async def harvest_batch_endpoint(req: HarvestRequest):
+    try:
+        return media_harvester.harvest_stock_batch(
+            niche=req.niche,
+            count=req.count,
+        )
+    except Exception as exc:
+        logger.exception("Error during batch media harvesting")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 # ============================================================================
 # LIVE TREND RESEARCH SERVICE
