@@ -1,0 +1,308 @@
+{
+  "blueprint_id": "vbp-48c64f6122ba",
+  "worker_id": "tech",
+  "source_trend_id": null,
+  "title": "Autonomous Video Pipeline Test",
+  "description": "Automated rendering test.",
+  "scenes": [
+    {
+      "scene_id": "s01-hook",
+      "emotional_beat": "hook",
+      "retention_zone": "critical",
+      "duration_seconds": 2.5,
+      "visual": {
+        "description": "Rapid kinetic text animation of the core claim, zooming into frame",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "autonomous",
+          "video",
+          "pipeline"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "high_contrast"
+      },
+      "audio": {
+        "voiceover_text": "Stop coding by hand.",
+        "voiceover_emphasis": [
+          "Stop",
+          "coding",
+          "by"
+        ],
+        "voice_tone": "urgent",
+        "sfx_cue": "impact",
+        "music_energy": "peak"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "glitch",
+      "pacing_note": "MAXIMUM ENERGY. No dead frames. Text must appear within 0.3s."
+    },
+    {
+      "scene_id": "s02-tension",
+      "emotional_beat": "tension",
+      "retention_zone": "build",
+      "duration_seconds": 3.0,
+      "visual": {
+        "description": "Dramatic b-roll establishing the topic context with subtle camera movement",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "autonomous",
+          "video",
+          "pipeline"
+        ],
+        "visual_metaphor": "unveiling hidden truth",
+        "camera_motion": "pan_left",
+        "color_mood": "desaturated"
+      },
+      "audio": {
+        "voiceover_text": "And most people have no idea what's actually happening with Autonomous Video Pipeline Test.",
+        "voiceover_emphasis": [],
+        "voice_tone": "conspiratorial",
+        "sfx_cue": "suspense_sting",
+        "music_energy": "building"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Lower energy but maintain intrigue. Lean into the curiosity gap."
+    },
+    {
+      "scene_id": "s03-core-1",
+      "emotional_beat": "revelation",
+      "retention_zone": "core",
+      "duration_seconds": 4.5,
+      "visual": {
+        "description": "Visual evidence or example illustrating: Scene 1: Neural voice active.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "scene",
+          "neural",
+          "voice"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_out",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "Scene 1: Neural voice active.",
+        "voiceover_emphasis": [],
+        "voice_tone": "excited",
+        "sfx_cue": "reveal_chime",
+        "music_energy": "building"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Evidence delivery scene 1. Vary visual type from previous scene."
+    },
+    {
+      "scene_id": "s04-core-2",
+      "emotional_beat": "escalation",
+      "retention_zone": "core",
+      "duration_seconds": 4.5,
+      "visual": {
+        "description": "Visual evidence or example illustrating: Scene 2: High definition output.",
+        "visual_type": "split_screen",
+        "search_keywords": [
+          "scene",
+          "high",
+          "definition"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_right",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "Scene 2: High definition output.",
+        "voiceover_emphasis": [],
+        "voice_tone": "serious",
+        "sfx_cue": null,
+        "music_energy": "building"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Evidence delivery scene 2. Vary visual type from previous scene."
+    },
+    {
+      "scene_id": "s05-payoff",
+      "emotional_beat": "payoff",
+      "retention_zone": "close",
+      "duration_seconds": 3.5,
+      "visual": {
+        "description": "Satisfying summary visual — chart, transformation, or before/after",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "autonomous",
+          "video",
+          "pipeline"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_out",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "And that changes everything about how we think about autonomous.",
+        "voiceover_emphasis": [],
+        "voice_tone": "calm",
+        "sfx_cue": null,
+        "music_energy": "drop"
+      },
+      "caption_style": "full_sentence",
+      "transition_in": "fade",
+      "pacing_note": "Breathing room. Let the insight land."
+    },
+    {
+      "scene_id": "s06-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 3.0,
+      "visual": {
+        "description": "Brand outro card with follow CTA and next-video tease",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "autonomous",
+          "video",
+          "pipeline"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "ken_burns",
+        "color_mood": null
+      },
+      "audio": {
+        "voiceover_text": "Follow for more.",
+        "voiceover_emphasis": [],
+        "voice_tone": "excited",
+        "sfx_cue": "notification",
+        "music_energy": "peak"
+      },
+      "caption_style": "minimal",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Energy spike for CTA. Make the follow feel urgent."
+    }
+  ],
+  "total_duration_seconds": 21.0,
+  "brand": {
+    "worker_id": "tech",
+    "brand_name": "Signal Tech",
+    "logo_path": null,
+    "watermark_position": "bottom_right",
+    "watermark_opacity": 0.3,
+    "colors": {
+      "primary": "#00d4ff",
+      "secondary": "#0a0e1a",
+      "accent": "#7c3aed",
+      "text_primary": "#ffffff",
+      "text_secondary": "#a0a0a0",
+      "caption_highlight": "#00d4ff",
+      "caption_background": "rgba(0,0,0,0.7)"
+    },
+    "typography": {
+      "heading_font": "JetBrains Mono Bold",
+      "body_font": "Inter-Regular",
+      "caption_font": "JetBrains Mono Bold",
+      "caption_size": 44
+    },
+    "intro_template": null,
+    "outro_template": null,
+    "default_voice": "en-US-GuyNeural",
+    "voice_speed": 1.08
+  },
+  "captions": {
+    "style": "word_highlight",
+    "position": "bottom_center",
+    "max_words_per_line": 5,
+    "highlight_color": "#00d4ff",
+    "base_color": "#ffffff",
+    "shadow_color": "#000000",
+    "font_size": 44,
+    "stroke_width": 3,
+    "animation": "pop"
+  },
+  "hook_variants": [
+    {
+      "variant_id": "hook-contrarian",
+      "variant_label": "Contrarian Warning",
+      "hook_text": "Everyone is wrong about Autonomous Video Pipeline Test. Here's the proof.",
+      "hook_visual_description": "Red warning text flash with camera shake effect",
+      "predicted_retention_3s": 0.72,
+      "hook_archetype": "contrarian"
+    },
+    {
+      "variant_id": "hook-curiosity",
+      "variant_label": "Curiosity Gap",
+      "hook_text": "I spent 48 hours testing Autonomous Video Pipeline Test and what I found changes everything.",
+      "hook_visual_description": "Personal POV shot transitioning to evidence montage",
+      "predicted_retention_3s": 0.68,
+      "hook_archetype": "curiosity_gap"
+    },
+    {
+      "variant_id": "hook-stat-shock",
+      "variant_label": "Statistical Shock",
+      "hook_text": "97% of people don't know this about Autonomous Video Pipeline Test. Number 3 will surprise you.",
+      "hook_visual_description": "Large animated percentage counter with dramatic reveal",
+      "predicted_retention_3s": 0.65,
+      "hook_archetype": "stat_paradox"
+    }
+  ],
+  "selected_hook_variant": "hook-contrarian",
+  "thumbnail": {
+    "headline_text": "AUTONOMOUS VIDEO PIPELINE TEST",
+    "subtext": "by Signal Tech",
+    "emotion": "shock",
+    "layout": "split_diagonal",
+    "background_image_keywords": [
+      "autonomous",
+      "video",
+      "pipeline"
+    ],
+    "use_brand_colors": true,
+    "face_overlay": false,
+    "arrow_or_circle": true
+  },
+  "export": {
+    "primary": {
+      "aspect_ratio": "9:16",
+      "resolution": "1080x1920",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "square": {
+      "aspect_ratio": "1:1",
+      "resolution": "1080x1080",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "landscape": null
+  },
+  "virality_score": {
+    "overall_score": 93,
+    "hook_strength": 100,
+    "pacing_quality": 100,
+    "visual_variety": 86,
+    "audio_energy": 100,
+    "cta_clarity": 85,
+    "shareability": 90,
+    "risk_flags": [],
+    "recommendation": "publish"
+  },
+  "hashtags": [
+    "#shorts",
+    "#viral",
+    "#aiandtechnology",
+    "#autonomous",
+    "#video",
+    "#pipeline",
+    "#test"
+  ],
+  "target_platforms": [
+    "youtube_shorts",
+    "instagram_reels",
+    "tiktok"
+  ],
+  "monetization_links": [],
+  "created_at": "2026-11-06T18:22:13.288992+00:00"
+}

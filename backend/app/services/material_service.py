@@ -1,12 +1,14 @@
 import os
+import re
 import math
 import subprocess
 import json
 import urllib.request
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict
 from PIL import Image, ImageDraw
 
 from app.core.logging import get_logger
+from app.schemas.video import StockMaterialItem
 
 logger = get_logger("material_service")
 
@@ -305,46 +307,11 @@ class MaterialService:
                 return output_path
 
         # Tier 4: Curated Real Stock Asset Bank (niche-curated photos & videos on disk)
-        curated_map = {
-            "tech": [
-                ("programmer_work.mp4", "video"),
-                ("tech_coding.jpg", "image"),
-                ("server_room.jpg", "image"),
-                ("programmer_work.jpg", "image"),
-            ],
-            "business": [
-                ("business_office.jpg", "image"),
-                ("finance_chart.jpg", "image"),
-                ("business_meeting.jpg", "image"),
-                ("business_startup.jpg", "image"),
-            ],
-            "curiosity": [
-                ("space_nebula.jpg", "image"),
-                ("education_library.jpg", "image"),
-                ("education_science.jpg", "image"),
-            ],
-            "education": [
-                ("education_library.jpg", "image"),
-                ("education_science.jpg", "image"),
-                ("space_nebula.jpg", "image"),
-            ],
-            "entertainment": [
-                ("concert_stage.jpg", "image"),
-                ("entertainment_cinema.jpg", "image"),
-                ("entertainment_music.jpg", "image"),
-            ],
-            "lifestyle": [
-                ("fashion_runway.jpg", "image"),
-                ("fashion_streetwear.jpg", "image"),
-                ("fashion_luxury.jpg", "image"),
-                ("fashion_cyberpunk.jpg", "image"),
-                ("fashion_couture.jpg", "image"),
-                ("fashion_accessories.jpg", "image"),
-            ],
-        }
-
-        assets = curated_map.get(worker_id, curated_map.get("lifestyle", curated_map["tech"]))
-        chosen_asset, asset_type = assets[scene_idx % len(assets)]
+        chosen_asset, asset_type = self.find_best_local_stock_asset(
+            keywords=keywords,
+            worker_id=worker_id,
+            scene_idx=scene_idx,
+        )
         asset_path = os.path.join(self.stock_images_dir, chosen_asset)
 
         if not os.path.exists(asset_path):
@@ -373,6 +340,16 @@ class MaterialService:
                         return output_path
                 except Exception as e:
                     logger.debug("Failed trimming curated video: %s", e)
+
+        # Tier 4b: Fallback to ANY available real stock image before resorting to procedural graphics
+        if os.path.exists(self.stock_images_dir):
+            for candidate in os.listdir(self.stock_images_dir):
+                if candidate.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                    cand_path = os.path.join(self.stock_images_dir, candidate)
+                    if os.path.exists(cand_path) and os.path.getsize(cand_path) > 1000:
+                        if self.convert_image_to_motion_video(cand_path, duration_sec, output_path, motion_type=effective_motion):
+                            logger.info("Using fallback real stock photo with %s motion: %s", effective_motion, cand_path)
+                            return output_path
 
         # Tier 5: Fallback to procedural kinetic motion video
         return self.generate_procedural_motion_video(
@@ -489,6 +466,131 @@ class MaterialService:
         proc.stdin.close()
         proc.wait()
         return output_path
+
+    def find_best_local_stock_asset(
+        self,
+        keywords: List[str],
+        worker_id: str = "tech",
+        scene_idx: int = 0,
+    ) -> Tuple[str, str]:
+        """Intelligently matches local curated stock footage or photos from disk using keyword relevance,
+        worker niche affinity, and scene rotation to prevent asset repetition."""
+        available_files = []
+        if os.path.exists(self.stock_images_dir):
+            for f in sorted(os.listdir(self.stock_images_dir)):
+                if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".mp4")):
+                    available_files.append((f, os.path.join(self.stock_images_dir, f)))
+
+        if not available_files and os.path.exists(self.materials_dir):
+            for f in sorted(os.listdir(self.materials_dir)):
+                if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".mp4")):
+                    available_files.append((f, os.path.join(self.materials_dir, f)))
+
+        if not available_files:
+            return "tech_coding.jpg", "image"
+
+        # Normalize keywords and niche
+        clean_tokens = set()
+        for kw in keywords:
+            for token in re.split(r"[\s,_\-]+", kw.lower()):
+                token = re.sub(r"[^\w]", "", token)
+                if len(token) > 2:
+                    clean_tokens.add(token)
+
+        worker_tokens = {worker_id.lower()}
+        if worker_id.lower() in ("lifestyle", "fashion"):
+            worker_tokens.update(["fashion", "style", "luxury", "couture", "streetwear", "accessories", "runway", "model", "outfit"])
+        elif worker_id.lower() in ("tech", "technology"):
+            worker_tokens.update(["code", "coding", "software", "programmer", "server", "cyber", "ai", "data"])
+        elif worker_id.lower() in ("business", "finance"):
+            worker_tokens.update(["chart", "meeting", "office", "startup", "money", "growth"])
+        elif worker_id.lower() in ("entertainment", "culture"):
+            worker_tokens.update(["cinema", "music", "concert", "stage", "movie", "film"])
+        elif worker_id.lower() in ("curiosity", "education"):
+            worker_tokens.update(["library", "science", "space", "nebula", "book", "galaxy"])
+
+        scored = []
+        for fname, full_path in available_files:
+            name_lower = fname.lower()
+            score = 0
+            # Direct keyword match in filename
+            for token in clean_tokens:
+                if token in name_lower:
+                    score += 10
+            # Worker niche affinity
+            for wt in worker_tokens:
+                if wt in name_lower:
+                    score += 5
+
+            scored.append((score, fname, full_path))
+
+        # Filter to those with score > 0
+        positive_matches = [item for item in scored if item[0] > 0]
+        if positive_matches:
+            positive_matches.sort(key=lambda x: x[0], reverse=True)
+            chosen = positive_matches[scene_idx % len(positive_matches)]
+            chosen_fname = chosen[1]
+        else:
+            chosen_fname = available_files[scene_idx % len(available_files)][0]
+
+        is_video = chosen_fname.lower().endswith(".mp4")
+        return chosen_fname, "video" if is_video else "image"
+
+    def list_stock_materials(self, worker_id: Optional[str] = None) -> List[StockMaterialItem]:
+        """Returns all available stock images and motion clips in the library."""
+        items: List[StockMaterialItem] = []
+        # Check stock_images_dir
+        if os.path.exists(self.stock_images_dir):
+            for fname in sorted(os.listdir(self.stock_images_dir)):
+                if fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".mp4")):
+                    fpath = os.path.join(self.stock_images_dir, fname)
+                    is_vid = fname.lower().endswith(".mp4")
+                    parts = re.split(r"[_\-.]+", fname.lower())
+                    niche = "tech"
+                    for n in ["fashion", "lifestyle", "business", "tech", "entertainment", "education", "curiosity", "finance"]:
+                        if n in parts:
+                            niche = n
+                            break
+                    tags = [p for p in parts if len(p) > 2 and p not in ("jpg", "jpeg", "png", "webp", "mp4")]
+                    rel_url = f"/storage/materials/stock_images/{fname}"
+                    thumb_url = rel_url if not is_vid else f"/storage/materials/stock_images/{fname.replace('.mp4', '.jpg')}"
+                    items.append(
+                        StockMaterialItem(
+                            filename=fname,
+                            asset_type="video" if is_vid else "image",
+                            file_path=fpath,
+                            relative_url=rel_url,
+                            thumbnail_url=thumb_url,
+                            niche=niche,
+                            tags=tags,
+                        )
+                    )
+
+        # Check downloads_dir
+        if os.path.exists(self.downloads_dir):
+            for fname in sorted(os.listdir(self.downloads_dir)):
+                if fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".mp4")):
+                    fpath = os.path.join(self.downloads_dir, fname)
+                    is_vid = fname.lower().endswith(".mp4")
+                    rel_url = f"/storage/materials/downloads/{fname}"
+                    items.append(
+                        StockMaterialItem(
+                            filename=fname,
+                            asset_type="video" if is_vid else "image",
+                            file_path=fpath,
+                            relative_url=rel_url,
+                            thumbnail_url=rel_url,
+                            niche="general",
+                            tags=["unsplash", "downloaded"],
+                        )
+                    )
+
+        if worker_id:
+            filtered = [item for item in items if item.niche == worker_id or worker_id in item.tags]
+            if filtered:
+                return filtered
+
+        return items
 
 
 material_service = MaterialService()

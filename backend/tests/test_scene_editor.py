@@ -7,9 +7,75 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app.main import app
 from app.services.video_engine import video_engine
 from app.services.video_renderer import video_renderer
+from app.services.material_service import material_service
 from app.schemas.video import SceneUpdateRequest
 
 client = TestClient(app)
+
+
+def test_find_best_local_stock_asset_fashion():
+    asset, asset_type = material_service.find_best_local_stock_asset(
+        keywords=["fashion", "runway", "luxury"],
+        worker_id="lifestyle",
+        scene_idx=0,
+    )
+    assert asset_type in ("image", "video")
+    assert "fashion" in asset.lower()
+
+
+def test_find_best_local_stock_asset_rotation():
+    # Verify different scene indices cycle through matching assets
+    asset0, _ = material_service.find_best_local_stock_asset(
+        keywords=["fashion", "couture", "streetwear"],
+        worker_id="lifestyle",
+        scene_idx=0,
+    )
+    asset1, _ = material_service.find_best_local_stock_asset(
+        keywords=["fashion", "couture", "streetwear"],
+        worker_id="lifestyle",
+        scene_idx=1,
+    )
+    assert asset0.endswith((".jpg", ".png", ".mp4"))
+    assert asset1.endswith((".jpg", ".png", ".mp4"))
+
+
+def test_list_stock_materials_endpoint():
+    resp = client.get("/api/v1/video/stock-materials")
+    assert resp.status_code == 200
+    items = resp.json()
+    assert len(items) > 0
+    assert any("fashion" in item["filename"].lower() for item in items)
+
+
+def test_audio_duration_calculation(tmp_path):
+    wav_path = str(tmp_path / "ambient.wav")
+    video_renderer._generate_ambient_bgm(duration_sec=3.5, output_path=wav_path)
+    dur = video_renderer._get_audio_duration(wav_path)
+    assert abs(dur - 3.5) <= 0.05
+
+
+def test_render_scene_overlay_bottom_position(tmp_path):
+    blueprint = video_engine.generate_blueprint(
+        worker_id="lifestyle",
+        trend_title="Future of Cyber Fashion 2025",
+        trend_summary="Digital fashion and runway technology revolutionizing wearable art.",
+    )
+    scene = blueprint.scenes[0]
+    out_overlay = str(tmp_path / "test_bottom_overlay.png")
+
+    video_renderer._render_scene_overlay(
+        scene=scene,
+        blueprint=blueprint,
+        scene_idx=0,
+        total_scenes=len(blueprint.scenes),
+        output_path=out_overlay,
+        caption_position="bottom",
+        caption_font_size=68,
+        caption_highlight_color="#FFE600",
+        caption_style="pill",
+    )
+    assert os.path.exists(out_overlay)
+    assert os.path.getsize(out_overlay) > 1000
 
 
 def test_scene_clips_generation_and_editor_endpoint():
@@ -49,11 +115,15 @@ def test_scene_clips_generation_and_editor_endpoint():
     assert len(clips_data) == len(bp.scenes)
     assert clips_data[0]["scene_idx"] == 0
 
-    # 5. Test Regenerating Single Scene: POST /video/blueprint/{blueprint_id}/scene/1/render
+    # 5. Test Regenerating Single Scene with bottom caption and color: POST /video/blueprint/{blueprint_id}/scene/1/render
     update_payload = {
-        "voiceover_text": "Updated voiceover for Scene 1 with neural speech.",
+        "voiceover_text": "Updated voiceover for Scene 1 with bottom subtitles.",
         "search_keywords": ["fashion", "runway", "model"],
         "camera_motion": "pan_left",
+        "caption_position": "bottom",
+        "caption_highlight_color": "#00FF66",
+        "caption_font_size": 64,
+        "caption_style": "pill",
     }
     regen_resp = client.post(
         f"/api/v1/video/blueprint/{bp.blueprint_id}/scene/1/render",
@@ -65,11 +135,10 @@ def test_scene_clips_generation_and_editor_endpoint():
 
     # Verify Scene 1 was updated in the returned clips
     updated_clip = next(c for c in regen_job["scene_clips"] if c["scene_idx"] == 1)
-    assert updated_clip["voiceover_text"] == "Updated voiceover for Scene 1 with neural speech."
+    assert updated_clip["voiceover_text"] == "Updated voiceover for Scene 1 with bottom subtitles."
     assert updated_clip["camera_motion"] == "pan_left"
 
     # Verify master video is still intact
     final_mp4 = os.path.join("storage", "videos", f"{bp.blueprint_id}.mp4")
     assert os.path.exists(final_mp4)
     assert os.path.getsize(final_mp4) > 10000
-

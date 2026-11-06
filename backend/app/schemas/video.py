@@ -251,12 +251,28 @@ class SceneClipArtifact(BaseModel):
 
 
 class SceneUpdateRequest(BaseModel):
-    """Payload for editing and regenerating an individual scene clip."""
+    """Payload for editing and regenerating an individual scene clip in the advanced editor."""
     voiceover_text: Optional[str] = None
     search_keywords: Optional[List[str]] = None
     camera_motion: Optional[str] = None
     visual_description: Optional[str] = None
     custom_asset_path: Optional[str] = None
+    caption_position: Optional[Literal["bottom", "center", "top", "bottom_center", "top_center"]] = None
+    caption_font_size: Optional[int] = None
+    caption_highlight_color: Optional[str] = None
+    caption_style: Optional[Literal["pill", "outline", "minimal"]] = None
+    sfx_cue: Optional[str] = None
+
+
+class StockMaterialItem(BaseModel):
+    """Stock photo/video asset available in the editor's visual library."""
+    filename: str
+    asset_type: Literal["image", "video"]
+    file_path: str
+    relative_url: str
+    thumbnail_url: str
+    niche: str
+    tags: List[str] = Field(default_factory=list)
 
 
 class RenderJobStatus(BaseModel):

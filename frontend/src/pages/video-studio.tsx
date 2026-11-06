@@ -9,6 +9,7 @@ import {
   type RenderJobStatus,
   type RenderedVideoItem,
   type VaultAsset,
+  type StockMaterialItem,
 } from "@/lib/api";
 import { useWorkers } from "@/hooks/use-workers";
 import { useAppStore } from "@/stores/app-store";
@@ -49,6 +50,7 @@ import {
   Type,
   Video,
   Volume2,
+  X,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -99,6 +101,11 @@ export default function VideoStudioPage() {
   const [editedMotion, setEditedMotion] = useState<string>("slow_zoom_in");
   const [selectedVaultAsset, setSelectedVaultAsset] = useState<string>("");
   const [sceneLayerTab, setSceneLayerTab] = useState<"clip" | "overlay" | "audio">("clip");
+  const [editedCaptionPosition, setEditedCaptionPosition] = useState<"bottom" | "center" | "top">("bottom");
+  const [editedHighlightColor, setEditedHighlightColor] = useState<string>("#FFE600");
+  const [editedFontSize, setEditedFontSize] = useState<number>(72);
+  const [editedCaptionStyle, setEditedCaptionStyle] = useState<"pill" | "outline" | "minimal">("pill");
+  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState<boolean>(false);
   const sceneVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const activeWorker = workers.find((w) => w.id === selectedWorkerId) || workers[0];
@@ -116,6 +123,12 @@ export default function VideoStudioPage() {
   const { data: vaultAssets = [], refetch: refetchVault, isFetching: isFetchingVault } = useQuery({
     queryKey: ["materials-vault", vaultNiche],
     queryFn: () => api.vaultMaterials(vaultNiche),
+  });
+
+  // Stock Materials Library Query
+  const { data: stockMaterials = [] } = useQuery({
+    queryKey: ["stock-materials", selectedWorkerId],
+    queryFn: () => api.stockMaterials(selectedWorkerId || undefined),
   });
 
   // Scene Clips Query
@@ -140,6 +153,11 @@ export default function VideoStudioPage() {
       setEditedMotion(selectedScene.visual.camera_motion || "slow_zoom_in");
       setSelectedVaultAsset("");
       setSceneLayerTab("clip");
+      setEditedCaptionPosition("bottom");
+      setEditedHighlightColor("#FFE600");
+      setEditedFontSize(72);
+      setEditedCaptionStyle("pill");
+      setIsAssetPickerOpen(false);
     }
   }, [selectedSceneId, selectedScene]);
 
@@ -170,6 +188,10 @@ export default function VideoStudioPage() {
         search_keywords: keywords.length > 0 ? keywords : undefined,
         camera_motion: editedMotion || undefined,
         custom_asset_path: selectedVaultAsset || undefined,
+        caption_position: editedCaptionPosition,
+        caption_font_size: editedFontSize,
+        caption_highlight_color: editedHighlightColor,
+        caption_style: editedCaptionStyle,
       });
     },
     onSuccess: (updatedJob) => {
@@ -1064,11 +1086,18 @@ export default function VideoStudioPage() {
                     </div>
                     <div className="flex items-center justify-between text-gray-300">
                       <span>SUBTITLE POSITION:</span>
-                      <span className="text-emerald-400">Centered Eye-Level Sweetspot</span>
+                      <span className="text-emerald-400 font-bold uppercase">{editedCaptionPosition} (Viral Safe Zone)</span>
                     </div>
                     <div className="flex items-center justify-between text-gray-300">
-                      <span>DURATION:</span>
-                      <span>{selectedScene?.duration_seconds.toFixed(1)}s</span>
+                      <span>HIGHLIGHT COLOR:</span>
+                      <span className="flex items-center gap-1.5 text-hive">
+                        <span className="h-2 w-2 rounded-full border border-white/40" style={{ backgroundColor: editedHighlightColor }} />
+                        {editedHighlightColor}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-gray-300">
+                      <span>DURATION & SYNC:</span>
+                      <span>{selectedScene?.duration_seconds.toFixed(1)}s (Locked — 0.00s Overlap)</span>
                     </div>
                     {currentSceneClip?.clip_path && (
                       <div className="flex items-center justify-between text-gray-300 pt-1 border-t border-border">
@@ -1178,33 +1207,191 @@ export default function VideoStudioPage() {
                         </div>
                       </div>
 
-                      {/* Field 4: Custom Asset Swap from Media Vault */}
-                      <div className="space-y-1.5">
+                      {/* Subtitle Positioning & Styling Controls */}
+                      <div className="rounded-xl border border-border bg-surface-deep p-3.5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-mono text-[9px] text-gray-300 font-semibold uppercase tracking-wider">
+                            <Type size={12} className="text-hive" />
+                            <span>SUBTITLE POSITIONING & STYLING</span>
+                          </div>
+                          <span className="font-mono text-[8px] text-hive bg-hive/10 border border-hive/20 rounded px-1.5 py-0.5">
+                            VIRAL LOWER-THIRD DEFAULT
+                          </span>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {/* Position Selector */}
+                          <div className="space-y-1.5">
+                            <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                              CAPTION POSITION
+                            </label>
+                            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-surface p-1 text-center font-mono text-[9px]">
+                              {[
+                                { id: "bottom" as const, label: "BOTTOM" },
+                                { id: "center" as const, label: "CENTER" },
+                                { id: "top" as const, label: "TOP" },
+                              ].map((pos) => (
+                                <button
+                                  key={pos.id}
+                                  type="button"
+                                  onClick={() => setEditedCaptionPosition(pos.id)}
+                                  className={cn(
+                                    "rounded py-1.5 font-bold transition-colors",
+                                    editedCaptionPosition === pos.id
+                                      ? "bg-hive text-[#090b10] shadow"
+                                      : "text-gray-400 hover:text-gray-200"
+                                  )}
+                                >
+                                  {pos.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Style Selector */}
+                          <div className="space-y-1.5">
+                            <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                              CAPTION STYLE
+                            </label>
+                            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-surface p-1 text-center font-mono text-[9px]">
+                              {[
+                                { id: "pill" as const, label: "PILL" },
+                                { id: "outline" as const, label: "STROKE" },
+                                { id: "minimal" as const, label: "MINIMAL" },
+                              ].map((st) => (
+                                <button
+                                  key={st.id}
+                                  type="button"
+                                  onClick={() => setEditedCaptionStyle(st.id)}
+                                  className={cn(
+                                    "rounded py-1.5 font-bold transition-colors",
+                                    editedCaptionStyle === st.id
+                                      ? "bg-hive text-[#090b10] shadow"
+                                      : "text-gray-400 hover:text-gray-200"
+                                  )}
+                                >
+                                  {st.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Highlight Color & Font Size Row */}
+                        <div className="grid gap-3 sm:grid-cols-2 pt-1 border-t border-border/50">
+                          <div className="space-y-1.5">
+                            <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                              HIGHLIGHT COLOR
+                            </label>
+                            <div className="flex items-center gap-1.5">
+                              {[
+                                { color: "#FFE600", name: "Gold" },
+                                { color: "#00FF66", name: "Neon" },
+                                { color: "#00F0FF", name: "Cyan" },
+                                { color: "#FF5757", name: "Coral" },
+                                { color: "#FFFFFF", name: "White" },
+                              ].map((c) => (
+                                <button
+                                  key={c.color}
+                                  type="button"
+                                  onClick={() => setEditedHighlightColor(c.color)}
+                                  className={cn(
+                                    "h-6 w-6 rounded-full border-2 transition-transform hover:scale-110",
+                                    editedHighlightColor.toUpperCase() === c.color.toUpperCase()
+                                      ? "border-white scale-110 ring-2 ring-hive/40"
+                                      : "border-transparent opacity-80"
+                                  )}
+                                  style={{ backgroundColor: c.color }}
+                                  title={c.name}
+                                />
+                              ))}
+                              <span className="font-mono text-[9px] text-gray-400 ml-1">{editedHighlightColor}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                                FONT SIZE
+                              </label>
+                              <span className="font-mono text-[9px] text-hive">{editedFontSize}px</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-surface p-1 text-center font-mono text-[9px]">
+                              {[
+                                { size: 54, label: "54px" },
+                                { size: 72, label: "72px" },
+                                { size: 84, label: "84px" },
+                              ].map((sz) => (
+                                <button
+                                  key={sz.size}
+                                  type="button"
+                                  onClick={() => setEditedFontSize(sz.size)}
+                                  className={cn(
+                                    "rounded py-1 font-bold transition-colors",
+                                    editedFontSize === sz.size
+                                      ? "bg-hive text-[#090b10] shadow"
+                                      : "text-gray-400 hover:text-gray-200"
+                                  )}
+                                >
+                                  {sz.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Field 4: Visual Footage & Background Asset Selector */}
+                      <div className="space-y-2 rounded-xl border border-border bg-surface-deep p-3.5">
                         <div className="flex items-center justify-between">
                           <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider">
-                            SWAP BACKGROUND ASSET FROM MEDIA VAULT (OPTIONAL)
+                            VISUAL FOOTAGE & BACKGROUND ASSET
                           </label>
-                          {selectedVaultAsset && (
+                          <div className="flex items-center gap-2">
+                            {selectedVaultAsset && (
+                              <button
+                                onClick={() => setSelectedVaultAsset("")}
+                                className="text-[9px] font-mono text-red-400 hover:underline"
+                              >
+                                RESET TO DYNAMIC MATCH
+                              </button>
+                            )}
                             <button
-                              onClick={() => setSelectedVaultAsset("")}
-                              className="text-[9px] font-mono text-red-400 hover:underline"
+                              type="button"
+                              onClick={() => setIsAssetPickerOpen(true)}
+                              className="flex items-center gap-1 rounded bg-hive/10 border border-hive/30 px-2.5 py-1 font-mono text-[9px] font-bold text-hive hover:bg-hive/20"
                             >
-                              CLEAR ASSET OVERRIDE
+                              <Clapperboard size={10} />
+                              BROWSE ASSET VAULT ({stockMaterials.length + vaultAssets.length})
                             </button>
-                          )}
+                          </div>
                         </div>
-                        <select
-                          value={selectedVaultAsset}
-                          onChange={(e) => setSelectedVaultAsset(e.target.value)}
-                          className="w-full rounded-lg border border-border bg-surface-deep px-3 py-2 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
-                        >
-                          <option value="">-- Use Dynamic Stock Matching (Unsplash / Stock Bank) --</option>
-                          {vaultAssets.map((asset) => (
-                            <option key={asset.asset_id} value={asset.file_path}>
-                              [{asset.niche.toUpperCase()}] {asset.filename} ({asset.tags.slice(0, 3).join(", ")})
-                            </option>
-                          ))}
-                        </select>
+
+                        {selectedVaultAsset ? (
+                          <div className="flex items-center justify-between rounded-lg border border-hive/40 bg-black/40 p-2.5 text-xs">
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                              <span className="font-mono text-[10px] text-gray-200 truncate">{selectedVaultAsset}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedVaultAsset("")}
+                              className="text-gray-400 hover:text-white p-1"
+                              title="Clear override"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between rounded-lg border border-border bg-black/20 p-2.5 text-xs">
+                            <span className="font-mono text-[10px] text-gray-400">
+                              ⚡ Dynamic AI Stock Matching (Curated Stock Bank / Unsplash HD)
+                            </span>
+                            <span className="rounded bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 font-mono text-[8px] text-emerald-400">
+                              ACTIVE
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Scene Metadata Preview */}
@@ -1682,6 +1869,200 @@ export default function VideoStudioPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Visual Stock & Media Vault Asset Picker Modal */}
+      {isAssetPickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl border border-hive/40 bg-[#0c1017] shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-border p-4 bg-surface">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-hive/10 border border-hive/30 text-hive">
+                  <Clapperboard size={16} />
+                </div>
+                <div>
+                  <h3 className="font-display text-sm font-semibold text-gray-100">
+                    Visual Stock & Media Vault Browser
+                  </h3>
+                  <p className="font-mono text-[10px] text-gray-400">
+                    Select any real photo or motion video to assign directly to Scene {selectedSceneIndex + 1}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAssetPickerOpen(false)}
+                className="rounded-lg border border-border p-1.5 text-gray-400 hover:text-white hover:bg-surface-deep transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body: Assets Grid */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="flex items-center justify-between text-xs font-mono text-gray-400">
+                <span>AVAILABLE ASSETS ({stockMaterials.length + vaultAssets.length} total)</span>
+                <span className="text-hive">Click an asset card to apply to this scene</span>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                {/* Option 0: Dynamic Stock Matching */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedVaultAsset("");
+                    setIsAssetPickerOpen(false);
+                  }}
+                  className={cn(
+                    "flex flex-col items-center justify-center rounded-xl border p-4 text-center transition-all h-48",
+                    !selectedVaultAsset
+                      ? "border-hive bg-hive/10 ring-2 ring-hive/30"
+                      : "border-dashed border-border bg-surface-deep hover:border-gray-400"
+                  )}
+                >
+                  <Sparkles size={24} className="text-hive mb-2" />
+                  <span className="font-mono text-xs font-bold text-gray-100">Dynamic AI Matching</span>
+                  <span className="text-[10px] text-gray-400 mt-1">
+                    Auto-fetches best stock photo & camera motion
+                  </span>
+                  {!selectedVaultAsset && (
+                    <span className="mt-2 rounded bg-hive px-2 py-0.5 text-[8px] font-mono font-bold text-[#090b10]">
+                      CURRENTLY ACTIVE
+                    </span>
+                  )}
+                </button>
+
+                {/* Stock Materials Library */}
+                {stockMaterials.map((item) => {
+                  const isSelected = selectedVaultAsset === item.file_path;
+                  return (
+                    <button
+                      key={item.filename}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVaultAsset(item.file_path);
+                        setIsAssetPickerOpen(false);
+                      }}
+                      className={cn(
+                        "group relative flex flex-col rounded-xl border overflow-hidden text-left transition-all h-48",
+                        isSelected
+                          ? "border-hive bg-hive/10 ring-2 ring-hive/40 shadow-lg scale-[1.02]"
+                          : "border-border bg-surface-deep hover:border-hive/50 hover:bg-surface"
+                      )}
+                    >
+                      <div className="relative h-28 w-full bg-black overflow-hidden">
+                        <img
+                          src={item.thumbnail_url || item.relative_url}
+                          alt={item.filename}
+                          className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <span className="absolute top-1.5 left-1.5 rounded bg-black/70 backdrop-blur-md px-1.5 py-0.5 text-[8px] font-mono font-bold text-hive border border-white/10 uppercase">
+                          {item.asset_type}
+                        </span>
+                        <span className="absolute top-1.5 right-1.5 rounded bg-black/70 backdrop-blur-md px-1.5 py-0.5 text-[8px] font-mono text-gray-300 border border-white/10 uppercase">
+                          {item.niche}
+                        </span>
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-hive/20 flex items-center justify-center">
+                            <span className="rounded-full bg-hive p-1 text-[#090b10]">
+                              <Check size={16} />
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-2 flex-1 flex flex-col justify-between">
+                        <div className="font-mono text-[10px] font-semibold text-gray-200 truncate">
+                          {item.filename}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {item.tags.slice(0, 3).map((t) => (
+                            <span key={t} className="rounded bg-black/40 px-1 py-0.2 text-[8px] text-gray-400 font-mono">
+                              #{t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+
+                {/* Vault Assets */}
+                {vaultAssets.map((asset) => {
+                  const isSelected = selectedVaultAsset === asset.file_path;
+                  return (
+                    <button
+                      key={asset.asset_id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVaultAsset(asset.file_path);
+                        setIsAssetPickerOpen(false);
+                      }}
+                      className={cn(
+                        "group relative flex flex-col rounded-xl border overflow-hidden text-left transition-all h-48",
+                        isSelected
+                          ? "border-hive bg-hive/10 ring-2 ring-hive/40 shadow-lg scale-[1.02]"
+                          : "border-border bg-surface-deep hover:border-hive/50 hover:bg-surface"
+                      )}
+                    >
+                      <div className="relative h-28 w-full bg-black overflow-hidden">
+                        {asset.thumbnail_url ? (
+                          <img
+                            src={asset.thumbnail_url}
+                            alt={asset.filename}
+                            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-[#151c2c]">
+                            <Clapperboard size={24} className="text-gray-500" />
+                          </div>
+                        )}
+                        <span className="absolute top-1.5 left-1.5 rounded bg-black/70 backdrop-blur-md px-1.5 py-0.5 text-[8px] font-mono font-bold text-hive border border-white/10 uppercase">
+                          VAULT
+                        </span>
+                        {isSelected && (
+                          <div className="absolute inset-0 bg-hive/20 flex items-center justify-center">
+                            <span className="rounded-full bg-hive p-1 text-[#090b10]">
+                              <Check size={16} />
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-2 flex-1 flex flex-col justify-between">
+                        <div className="font-mono text-[10px] font-semibold text-gray-200 truncate">
+                          {asset.filename}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {asset.tags.slice(0, 3).map((t, idx) => (
+                            <span key={idx} className="rounded bg-black/40 px-1 py-0.2 text-[8px] text-gray-400 font-mono">
+                              #{t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between border-t border-border p-3 bg-surface">
+              <span className="font-mono text-[10px] text-gray-400 truncate max-w-md">
+                Selected: {selectedVaultAsset || "Dynamic AI Matcher"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsAssetPickerOpen(false)}
+                className="rounded-lg bg-hive px-4 py-1.5 font-mono text-xs font-bold text-[#090b10] hover:bg-hive-400"
+              >
+                DONE
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

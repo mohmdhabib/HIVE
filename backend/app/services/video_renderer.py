@@ -149,6 +149,39 @@ class VideoRenderService:
             f.setframerate(sample_rate)
             f.writeframes(frames)
 
+    def _get_audio_duration(self, file_path: str) -> float:
+        """Measures exact duration in seconds of an audio file using wave header or ffprobe/ffmpeg fallback."""
+        if not file_path or not os.path.exists(file_path):
+            return 3.0
+        try:
+            with wave.open(file_path, "r") as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                if rate > 0:
+                    dur = frames / float(rate)
+                    return round(dur, 2)
+        except Exception:
+            pass
+
+        try:
+            ffmpeg_bin = get_ffmpeg_binary()
+            ffprobe_bin = ffmpeg_bin.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
+            if os.path.exists(ffprobe_bin):
+                cmd = [
+                    ffprobe_bin, "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    file_path,
+                ]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+                val = float(res.stdout.strip())
+                if val > 0:
+                    return round(val, 2)
+        except Exception:
+            pass
+
+        return 3.5
+
     def _get_font(self, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         """Loads a bold viral sans-serif font for captions (Impact, Arial Bold, Segoe UI Bold)."""
         font_candidates = [
@@ -224,8 +257,13 @@ class VideoRenderService:
         scene_idx: int,
         total_scenes: int,
         output_path: str,
+        caption_position: str = "bottom",
+        caption_font_size: Optional[int] = None,
+        caption_highlight_color: Optional[str] = None,
+        caption_style: str = "pill",
     ):
-        """Renders viral short-form typography (Hormozi/TikTok style) with bold outlines and keyword highlighting."""
+        """Renders viral short-form typography (Hormozi/TikTok style) with bottom lower-third positioning,
+        bold outlines, high-contrast backdrop pills, and editable highlight colors."""
         width, height = 1080, 1920
         img = Image.new("RGBA", (width, height), color=(0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
@@ -240,7 +278,7 @@ class VideoRenderService:
         draw.ellipse([82, 102, 94, 114], fill=(*p_rgb, 255))
         draw.text((106, 95), brand_label[:18], font=badge_font, fill=(255, 255, 255, 235))
 
-        # 2. Viral Short-Form Captions (Centered in Frame, Impact/Arial Bold, Pill Contrast, Word Highlights)
+        # 2. Viral Short-Form Captions
         words = scene.audio.voiceover_text.split()
         if not words:
             words = ["HIVE", "AUTONOMOUS", "MEDIA"]
@@ -258,16 +296,34 @@ class VideoRenderService:
         if curr:
             lines.append(" ".join(curr).upper())
 
-        caption_font_size = 72 if len(lines) <= 3 else 62
-        line_height = 86 if len(lines) <= 3 else 74
-        caption_font = self._get_font(caption_font_size)
+        eff_font_size = caption_font_size if (caption_font_size and caption_font_size >= 24) else (72 if len(lines) <= 3 else 62)
+        line_height = int(eff_font_size * 1.20)
+        caption_font = self._get_font(eff_font_size)
+
+        # Parse highlight color
+        custom_h_rgb = (255, 230, 0)  # Default viral Gold/Yellow
+        if caption_highlight_color and caption_highlight_color.startswith("#"):
+            h = caption_highlight_color.lstrip("#")
+            if len(h) == 3:
+                h = "".join([c*2 for c in h])
+            if len(h) == 6:
+                try:
+                    custom_h_rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+                except Exception:
+                    pass
 
         # Identify highlight keywords
         emphasis_words = set(w.upper().strip(".,!?\"'") for w in scene.audio.voiceover_emphasis) if scene.audio.voiceover_emphasis else set()
 
         total_text_h = len(lines) * line_height
-        # Position centered in the video frame (focal eye-level sweet spot)
-        y_start = (height - total_text_h) // 2
+        pos = (caption_position or "bottom").lower()
+        if "top" in pos:
+            y_start = 320
+        elif "center" in pos and "bottom" not in pos and "top" not in pos:
+            y_start = (height - total_text_h) // 2
+        else:
+            # Default: standard viral lower-third (centered in bottom 1200-1550 safe zone)
+            y_start = max(1000, min(1480 - total_text_h, 1420 - total_text_h))
         y = y_start
 
         for idx, line in enumerate(lines):
@@ -277,21 +333,23 @@ class VideoRenderService:
 
             # Check if any word in this line is an active highlight
             line_has_emphasis = any(w in emphasis_words for w in line.split()) or (scene_idx == 0 and idx == 0)
-            highlight_color = (255, 235, 59, 255) if line_has_emphasis else (255, 255, 255, 255)
+            highlight_color = (*custom_h_rgb, 255) if line_has_emphasis else (255, 255, 255, 255)
 
             # High-contrast backdrop pill for readability over any footage
-            pill_pad_x = 24
-            pill_pad_y = 6
-            draw.rounded_rectangle(
-                [x - pill_pad_x, y - pill_pad_y, x + line_w + pill_pad_x, y + line_height - 12],
-                radius=18,
-                fill=(8, 10, 16, 175),
-            )
+            if caption_style == "pill":
+                pill_pad_x = 24
+                pill_pad_y = 6
+                draw.rounded_rectangle(
+                    [x - pill_pad_x, y - pill_pad_y, x + line_w + pill_pad_x, y + line_height - 10],
+                    radius=18,
+                    fill=(8, 10, 16, 180),
+                )
 
             # Drop shadow
             draw.text((x + 3, y + 4), line, font=caption_font, fill=(0, 0, 0, 220))
             # Main bold text with thick black outline
-            draw.text((x, y), line, font=caption_font, fill=highlight_color, stroke_width=7, stroke_fill=(10, 10, 12, 255))
+            stroke_w = 7 if caption_style != "minimal" else 3
+            draw.text((x, y), line, font=caption_font, fill=highlight_color, stroke_width=stroke_w, stroke_fill=(10, 10, 12, 255))
             y += line_height
 
         img.save(output_path, "PNG")
@@ -382,7 +440,6 @@ class VideoRenderService:
                 job.progress_pct = 10.0 + (idx / total_scenes) * 70.0
                 job.current_step = f"Compositing moving video footage for Scene {idx + 1}/{total_scenes}: {scene.emotional_beat.value.upper()}"
 
-                duration = max(3.0, scene.duration_seconds)
                 scene_bg_video = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{idx}_motion.mp4")
                 scene_overlay = os.path.join(bp_clips_dir, f"scene_{idx}_overlay.png")
                 scene_voice = os.path.join(bp_clips_dir, f"scene_{idx}_voice.wav")
@@ -391,7 +448,20 @@ class VideoRenderService:
                 scene_mp4 = os.path.join(bp_clips_dir, f"scene_{idx}.mp4")
                 scene_thumb = os.path.join(bp_clips_dir, f"scene_{idx}_thumb.jpg")
 
-                # Step A: Obtain real stock video, niche background loop, or kinetic motion footage
+                # Step A: Synthesize Real AI Spoken Voiceover FIRST
+                voice_service.generate_voiceover(
+                    text=scene.audio.voiceover_text,
+                    worker_id=blueprint.worker_id,
+                    duration_sec=scene.duration_seconds,
+                    output_path=scene_voice,
+                )
+
+                # Step B: Measure EXACT voiceover duration and lock scene duration to prevent audio overlap
+                voice_duration = self._get_audio_duration(scene_voice)
+                duration = max(3.0, round(voice_duration + 0.35, 2))
+                scene.duration_seconds = duration
+
+                # Step C: Obtain real stock video, niche background loop, or kinetic motion footage matching exact duration
                 material_service.get_scene_footage(
                     keywords=scene.visual.search_keywords,
                     worker_id=blueprint.worker_id,
@@ -403,24 +473,19 @@ class VideoRenderService:
                     camera_motion=scene.visual.camera_motion,
                 )
 
-                # Step B: Render transparent subtitle and HUD overlay
+                # Step D: Render transparent subtitle and HUD overlay (default positioned at bottom lower-third)
                 self._render_scene_overlay(
                     scene=scene,
                     blueprint=blueprint,
                     scene_idx=idx,
                     total_scenes=total_scenes,
                     output_path=scene_overlay,
+                    caption_position="bottom",
                 )
 
-                # Step C: Synthesize Real AI Spoken Voiceover & Lo-Fi Ambiance & SFX
-                voice_service.generate_voiceover(
-                    text=scene.audio.voiceover_text,
-                    worker_id=blueprint.worker_id,
-                    duration_sec=duration,
-                    output_path=scene_voice,
-                )
+                # Step E: Ambient BGM + Audio Mixing with ZERO bleed and microsecond-level synchronization
                 self._generate_ambient_bgm(duration_sec=duration, output_path=scene_bgm)
-
+                fade_start = max(0.0, round(duration - 0.35, 2))
                 sfx_path = sfx_service.get_sfx_path(scene.audio.sfx_cue)
                 if sfx_path and os.path.exists(sfx_path):
                     mix_cmd = [
@@ -428,7 +493,11 @@ class VideoRenderService:
                         "-i", scene_voice,
                         "-i", scene_bgm,
                         "-i", sfx_path,
-                        "-filter_complex", "[0:a]volume=1.0[v];[1:a]volume=0.18[b];[2:a]volume=0.35[s];[v][b][s]amix=inputs=3:duration=first:dropout_transition=2[a]",
+                        "-filter_complex",
+                        f"[0:a]apad=pad_dur=2.0,atrim=0:{duration}[v];"
+                        f"[1:a]volume=0.18,atrim=0:{duration},afade=t=out:st={fade_start}:d=0.35[b];"
+                        f"[2:a]volume=0.30,apad=pad_dur=2.0,atrim=0:{duration}[s];"
+                        f"[v][b][s]amix=inputs=3:duration=first:dropout_transition=0,atrim=0:{duration}[a]",
                         "-map", "[a]",
                         "-c:a", "pcm_s16le",
                         scene_audio_mixed,
@@ -438,14 +507,17 @@ class VideoRenderService:
                         ffmpeg_bin, "-y",
                         "-i", scene_voice,
                         "-i", scene_bgm,
-                        "-filter_complex", "[0:a]volume=1.0[v];[1:a]volume=0.18[b];[v][b]amix=inputs=2:duration=first:dropout_transition=2[a]",
+                        "-filter_complex",
+                        f"[0:a]apad=pad_dur=2.0,atrim=0:{duration}[v];"
+                        f"[1:a]volume=0.18,atrim=0:{duration},afade=t=out:st={fade_start}:d=0.35[b];"
+                        f"[v][b]amix=inputs=2:duration=first:dropout_transition=0,atrim=0:{duration}[a]",
                         "-map", "[a]",
                         "-c:a", "pcm_s16le",
                         scene_audio_mixed,
                     ]
                 subprocess.run(mix_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
-                # Step D: Composite moving video + subtitle overlay + mixed audio into final scene MP4
+                # Step F: Composite moving video + subtitle overlay + mixed audio into final scene MP4
                 job.status = "compositing"
                 job.current_step = f"Burning animated subtitles & audio into Scene {idx + 1}/{total_scenes}"
 
@@ -457,12 +529,12 @@ class VideoRenderService:
                     "-filter_complex", "[0:v][1:v]overlay=0:0[v]",
                     "-map", "[v]",
                     "-map", "2:a",
+                    "-t", str(duration),
                     "-c:v", "libx264",
                     "-preset", "ultrafast",
                     "-pix_fmt", "yuv420p",
                     "-c:a", "aac",
                     "-b:a", "192k",
-                    "-shortest",
                     scene_mp4,
                 ]
                 subprocess.run(comp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
@@ -598,7 +670,6 @@ class VideoRenderService:
             scene.visual.description = update.visual_description.strip()
 
         ffmpeg_bin = get_ffmpeg_binary()
-        duration = max(3.0, scene.duration_seconds)
         os.makedirs(bp_clips_dir, exist_ok=True)
 
         scene_bg_video = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_s{scene_idx}_motion.mp4")
@@ -609,7 +680,20 @@ class VideoRenderService:
         scene_mp4 = os.path.join(bp_clips_dir, f"scene_{scene_idx}.mp4")
         scene_thumb = os.path.join(bp_clips_dir, f"scene_{scene_idx}_thumb.jpg")
 
-        # Visual background: if custom asset provided, use it directly
+        # Step 1: Synthesize voiceover FIRST
+        voice_service.generate_voiceover(
+            text=scene.audio.voiceover_text,
+            worker_id=blueprint.worker_id,
+            duration_sec=scene.duration_seconds,
+            output_path=scene_voice,
+        )
+
+        # Step 2: Measure EXACT voiceover duration and lock scene duration
+        voice_duration = self._get_audio_duration(scene_voice)
+        duration = max(3.0, round(voice_duration + 0.35, 2))
+        scene.duration_seconds = duration
+
+        # Step 3: Visual background: if custom asset provided, use it directly
         if update.custom_asset_path and os.path.exists(update.custom_asset_path):
             if update.custom_asset_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
                 material_service.convert_image_to_motion_video(
@@ -642,31 +726,34 @@ class VideoRenderService:
                 camera_motion=scene.visual.camera_motion,
             )
 
-        # Overlay & audio
+        # Step 4: Render transparent subtitle and HUD overlay with custom options
         self._render_scene_overlay(
             scene=scene,
             blueprint=blueprint,
             scene_idx=scene_idx,
             total_scenes=len(blueprint.scenes),
             output_path=scene_overlay,
+            caption_position=update.caption_position or "bottom",
+            caption_font_size=update.caption_font_size,
+            caption_highlight_color=update.caption_highlight_color,
+            caption_style=update.caption_style or "pill",
         )
 
-        voice_service.generate_voiceover(
-            text=scene.audio.voiceover_text,
-            worker_id=blueprint.worker_id,
-            duration_sec=duration,
-            output_path=scene_voice,
-        )
+        # Step 5: Ambient BGM & zero-bleed audio mixing
         self._generate_ambient_bgm(duration_sec=duration, output_path=scene_bgm)
-
-        sfx_path = sfx_service.get_sfx_path(scene.audio.sfx_cue)
+        fade_start = max(0.0, round(duration - 0.35, 2))
+        sfx_path = sfx_service.get_sfx_path(update.sfx_cue or scene.audio.sfx_cue)
         if sfx_path and os.path.exists(sfx_path):
             mix_cmd = [
                 ffmpeg_bin, "-y",
                 "-i", scene_voice,
                 "-i", scene_bgm,
                 "-i", sfx_path,
-                "-filter_complex", "[0:a]volume=1.0[v];[1:a]volume=0.18[b];[2:a]volume=0.35[s];[v][b][s]amix=inputs=3:duration=first:dropout_transition=2[a]",
+                "-filter_complex",
+                f"[0:a]apad=pad_dur=2.0,atrim=0:{duration}[v];"
+                f"[1:a]volume=0.18,atrim=0:{duration},afade=t=out:st={fade_start}:d=0.35[b];"
+                f"[2:a]volume=0.30,apad=pad_dur=2.0,atrim=0:{duration}[s];"
+                f"[v][b][s]amix=inputs=3:duration=first:dropout_transition=0,atrim=0:{duration}[a]",
                 "-map", "[a]",
                 "-c:a", "pcm_s16le",
                 scene_audio_mixed,
@@ -676,14 +763,17 @@ class VideoRenderService:
                 ffmpeg_bin, "-y",
                 "-i", scene_voice,
                 "-i", scene_bgm,
-                "-filter_complex", "[0:a]volume=1.0[v];[1:a]volume=0.18[b];[v][b]amix=inputs=2:duration=first:dropout_transition=2[a]",
+                "-filter_complex",
+                f"[0:a]apad=pad_dur=2.0,atrim=0:{duration}[v];"
+                f"[1:a]volume=0.18,atrim=0:{duration},afade=t=out:st={fade_start}:d=0.35[b];"
+                f"[v][b]amix=inputs=2:duration=first:dropout_transition=0,atrim=0:{duration}[a]",
                 "-map", "[a]",
                 "-c:a", "pcm_s16le",
                 scene_audio_mixed,
             ]
         subprocess.run(mix_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
-        # Composite scene
+        # Step 6: Composite scene MP4
         comp_cmd = [
             ffmpeg_bin, "-y",
             "-i", scene_bg_video,
@@ -692,12 +782,12 @@ class VideoRenderService:
             "-filter_complex", "[0:v][1:v]overlay=0:0[v]",
             "-map", "[v]",
             "-map", "2:a",
+            "-t", str(duration),
             "-c:v", "libx264",
             "-preset", "ultrafast",
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-b:a", "192k",
-            "-shortest",
             scene_mp4,
         ]
         subprocess.run(comp_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)

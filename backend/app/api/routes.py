@@ -15,6 +15,7 @@ from app.schemas.video import (
     RenderJobStatus,
     SceneClipArtifact,
     SceneUpdateRequest,
+    StockMaterialItem,
 )
 from app.schemas.briefing import MasterExecutiveBriefing, WorkerPerformanceDigest
 from app.workers.registry import list_workers, get_worker
@@ -31,6 +32,7 @@ from app.services.system_monitor import system_monitor
 from app.services.trend_research import trend_research_service
 from app.services.video_engine import video_engine
 from app.services.video_renderer import video_renderer
+from app.services.material_service import material_service
 from app.services.master_briefing import master_briefing_service
 from app.dependencies import get_llm_service
 from app.config import Settings, get_settings
@@ -274,6 +276,10 @@ async def regenerate_single_scene_endpoint(
     except Exception as exc:
         logger.exception("Error regenerating scene %d for blueprint %s", scene_idx, blueprint_id)
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/video/stock-materials", response_model=list[StockMaterialItem])
+async def list_stock_materials_endpoint(worker_id: str | None = None):
+    return material_service.list_stock_materials(worker_id=worker_id)
 
 # ============================================================================
 # AUTOMATED MEDIA HARVESTER & VAULT

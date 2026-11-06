@@ -173,6 +173,21 @@ export interface SceneUpdateRequest {
   camera_motion?: string;
   visual_description?: string;
   custom_asset_path?: string;
+  caption_position?: "bottom" | "center" | "top" | "bottom_center" | "top_center";
+  caption_font_size?: number;
+  caption_highlight_color?: string;
+  caption_style?: "pill" | "outline" | "minimal";
+  sfx_cue?: string;
+}
+
+export interface StockMaterialItem {
+  filename: string;
+  asset_type: "image" | "video";
+  file_path: string;
+  relative_url: string;
+  thumbnail_url: string;
+  niche: string;
+  tags: string[];
 }
 
 export interface RenderJobStatus {
@@ -611,6 +626,10 @@ export const api = {
     }),
   blueprintSceneClips: (blueprintId: string) =>
     request<SceneClipArtifact[]>(`/video/blueprint/${encodeURIComponent(blueprintId)}/clips`),
+  stockMaterials: (worker_id?: string) => {
+    const query = worker_id ? `?worker_id=${encodeURIComponent(worker_id)}` : "";
+    return request<StockMaterialItem[]>(`/video/stock-materials${query}`);
+  },
   regenerateSceneClip: (blueprintId: string, sceneIdx: number, data: SceneUpdateRequest) =>
     request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/${sceneIdx}/render`, {
       method: "POST",
