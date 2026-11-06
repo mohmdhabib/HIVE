@@ -1,9 +1,14 @@
 const API_BASE = "/api";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const isFormData = typeof FormData !== "undefined" && options?.body instanceof FormData;
+  const headers: Record<string, string> = {
+    ...(!isFormData ? { "Content-Type": "application/json" } : {}),
+    ...(options?.headers as Record<string, string> || {}),
+  };
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
+    headers,
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }));
@@ -55,6 +60,7 @@ export interface VisualDirective {
   visual_metaphor?: string | null;
   camera_motion: string;
   color_mood?: string | null;
+  aspect_ratio?: string | null;
 }
 
 export interface AudioDirective {
@@ -63,6 +69,7 @@ export interface AudioDirective {
   voice_tone: string;
   sfx_cue?: string | null;
   music_energy: string;
+  bgm_track?: string | null;
 }
 
 export interface SceneNode {
@@ -178,6 +185,36 @@ export interface SceneUpdateRequest {
   caption_highlight_color?: string;
   caption_style?: "pill" | "outline" | "minimal";
   sfx_cue?: string;
+  voice_speed?: number;
+  bgm_track?: string;
+  visual_filter?: "none" | "vibrant" | "cinematic" | "cyberpunk";
+  aspect_ratio?: "9:16" | "1:1" | "16:9";
+}
+
+export interface SceneReorderRequest {
+  from_idx: number;
+  to_idx: number;
+}
+
+export interface SceneAddRequest {
+  scene_idx?: number;
+  voiceover_text: string;
+  search_keywords?: string[];
+  camera_motion?: string;
+  emotional_beat?: string;
+}
+
+export interface EnhanceScriptRequest {
+  style: "punchy" | "curiosity_gap" | "controversial" | "conversational";
+}
+
+export interface SFXCatalogItem {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  duration_sec: number;
+  tags: string[];
 }
 
 export interface StockMaterialItem {
@@ -626,6 +663,8 @@ export const api = {
     }),
   blueprintSceneClips: (blueprintId: string) =>
     request<SceneClipArtifact[]>(`/video/blueprint/${encodeURIComponent(blueprintId)}/clips`),
+  getBlueprint: (blueprintId: string) =>
+    request<VideoProductionBlueprint>(`/video/blueprint/${encodeURIComponent(blueprintId)}`),
   stockMaterials: (worker_id?: string) => {
     const query = worker_id ? `?worker_id=${encodeURIComponent(worker_id)}` : "";
     return request<StockMaterialItem[]>(`/video/stock-materials${query}`);
@@ -635,4 +674,41 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  reorderScene: (blueprintId: string, fromIdx: number, toIdx: number) =>
+    request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ from_idx: fromIdx, to_idx: toIdx }),
+    }),
+  addScene: (blueprintId: string, data: SceneAddRequest) =>
+    request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/add`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteScene: (blueprintId: string, sceneIdx: number) =>
+    request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/${sceneIdx}`, {
+      method: "DELETE",
+    }),
+  duplicateScene: (blueprintId: string, sceneIdx: number) =>
+    request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/${sceneIdx}/duplicate`, {
+      method: "POST",
+    }),
+  enhanceScript: (blueprintId: string, sceneIdx: number, style: string) =>
+    request<{ original_script: string; enhanced_script: string; style: string }>(
+      `/video/blueprint/${encodeURIComponent(blueprintId)}/scene/${sceneIdx}/enhance-script`,
+      {
+        method: "POST",
+        body: JSON.stringify({ style }),
+      }
+    ),
+  uploadAsset: async (file: File, niche: string = "tech", tags: string = "") => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("niche", niche);
+    formData.append("tags", tags);
+    return request<StockMaterialItem>("/video/upload-asset", {
+      method: "POST",
+      body: formData,
+    });
+  },
+  sfxCatalog: () => request<SFXCatalogItem[]>("/video/sfx-catalog"),
 };

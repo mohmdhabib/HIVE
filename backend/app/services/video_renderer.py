@@ -17,6 +17,8 @@ from app.schemas.video import (
     SceneNode,
     SceneClipArtifact,
     SceneUpdateRequest,
+    SceneAddRequest,
+    SceneReorderRequest,
 )
 from app.workers.registry import get_worker
 from app.services.material_service import material_service
@@ -209,10 +211,10 @@ class VideoRenderService:
                     pass
         return ImageFont.load_default()
 
-    def _generate_ambient_bgm(self, duration_sec: float, output_path: str):
+    def _generate_ambient_bgm(self, duration_sec: float, output_path: str, track_name: str = "cyber_beat"):
         """Uses studio lo-fi beat track from storage/bgm/ or synthesizes rhythmic background music."""
         bgm_dir = os.path.join(self.storage_dir, "bgm")
-        curated_beat = os.path.join(bgm_dir, "cyber_beat.wav")
+        curated_beat = os.path.join(bgm_dir, f"{track_name}.wav")
         ffmpeg_bin = get_ffmpeg_binary()
 
         if os.path.exists(curated_beat) and os.path.getsize(curated_beat) > 50000:
@@ -231,26 +233,43 @@ class VideoRenderService:
             except Exception as e:
                 logger.debug("Failed cutting curated BGM: %s", e)
 
-        # Fallback harmonic synthwave
+        # Fallback harmonic synthesis tailored to chosen theme
         sample_rate = 44100
         total_samples = int(sample_rate * duration_sec)
         frames = bytearray()
-        chords = [
-            (55.0, 220.0, 261.63, 329.63),
-            (43.65, 174.61, 220.0, 261.63),
-            (65.41, 196.0, 261.63, 329.63),
-            (49.0, 196.0, 246.94, 293.66),
-        ]
+
+        if track_name == "deep_ambient":
+            chords = [(43.65, 87.3, 130.8, 174.6), (55.0, 110.0, 164.8, 220.0), (49.0, 98.0, 146.8, 196.0)]
+            period = 3.5
+            beat_freq = 1500
+        elif track_name == "upbeat_viral":
+            chords = [(130.8, 261.6, 329.6, 392.0), (146.8, 293.6, 369.9, 440.0), (164.8, 329.6, 392.0, 493.8)]
+            period = 1.8
+            beat_freq = 4200
+        elif track_name == "cinematic_suspense":
+            chords = [(36.7, 73.4, 110.0, 155.5), (41.2, 82.4, 123.4, 164.8), (43.6, 87.3, 130.8, 174.6)]
+            period = 4.0
+            beat_freq = 800
+        else:  # cyber_beat default
+            chords = [
+                (55.0, 220.0, 261.63, 329.63),
+                (43.65, 174.61, 220.0, 261.63),
+                (65.41, 196.0, 261.63, 329.63),
+                (49.0, 196.0, 246.94, 293.66),
+            ]
+            period = 2.5
+            beat_freq = 3500
+
         for i in range(total_samples):
             t = i / sample_rate
-            chord_idx = int((t / 2.5) % len(chords))
+            chord_idx = int((t / period) % len(chords))
             root, p1, p2, p3 = chords[chord_idx]
             bass = math.sin(2 * math.pi * root * t) * 0.30
             pad1 = math.sin(2 * math.pi * p1 * t) * 0.10
             pad2 = math.sin(2 * math.pi * p2 * t) * 0.08
             pad3 = math.sin(2 * math.pi * p3 * t) * 0.06
             beat_phase = t % 0.5
-            tick = math.sin(2 * math.pi * 3500 * t) * math.exp(-beat_phase * 40) * 0.06
+            tick = math.sin(2 * math.pi * beat_freq * t) * math.exp(-beat_phase * 40) * 0.05
             val = max(-1.0, min(1.0, (bass + pad1 + pad2 + pad3 + tick) * 0.8))
             frames.extend(struct.pack("<h", int(val * 32767)))
 
@@ -271,10 +290,17 @@ class VideoRenderService:
         caption_font_size: Optional[int] = None,
         caption_highlight_color: Optional[str] = None,
         caption_style: str = "pill",
+        aspect_ratio: str = "9:16",
     ):
-        """Renders viral short-form typography (Hormozi/TikTok style) with bottom lower-third positioning,
+        """Renders viral short-form typography (Hormozi/TikTok style) with customizable positioning,
         bold outlines, high-contrast backdrop pills, and editable highlight colors."""
-        width, height = 1080, 1920
+        if aspect_ratio == "1:1":
+            width, height = 1080, 1080
+        elif aspect_ratio == "16:9":
+            width, height = 1920, 1080
+        else:
+            width, height = 1080, 1920
+
         img = Image.new("RGBA", (width, height), color=(0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
 
@@ -284,21 +310,21 @@ class VideoRenderService:
         # 1. Sleek, minimal channel badge pill (top-left)
         badge_font = self._get_font(26)
         brand_label = blueprint.brand.brand_name.upper()
-        draw.rounded_rectangle([60, 80, 360, 136], radius=28, fill=(10, 14, 22, 175), outline=(255, 255, 255, 45), width=1)
-        draw.ellipse([82, 102, 94, 114], fill=(*p_rgb, 255))
-        draw.text((106, 95), brand_label[:18], font=badge_font, fill=(255, 255, 255, 235))
+        draw.rounded_rectangle([60, 60, 360, 116], radius=28, fill=(10, 14, 22, 175), outline=(255, 255, 255, 45), width=1)
+        draw.ellipse([82, 82, 94, 94], fill=(*p_rgb, 255))
+        draw.text((106, 75), brand_label[:18], font=badge_font, fill=(255, 255, 255, 235))
 
         # 2. Viral Short-Form Captions
         words = scene.audio.voiceover_text.split()
         if not words:
             words = ["HIVE", "AUTONOMOUS", "MEDIA"]
 
-        # Break into punchy 2-4 word lines (max 20 chars per line), preserving all words without truncation
         lines = []
         curr = []
+        max_chars = 32 if aspect_ratio == "16:9" else 20
         for w in words:
             cand = " ".join(curr + [w])
-            if len(cand) > 20 and len(curr) >= 2:
+            if len(cand) > max_chars and len(curr) >= 2:
                 lines.append(" ".join(curr).upper())
                 curr = [w]
             else:
@@ -307,6 +333,8 @@ class VideoRenderService:
             lines.append(" ".join(curr).upper())
 
         eff_font_size = caption_font_size if (caption_font_size and caption_font_size >= 24) else (72 if len(lines) <= 3 else 62)
+        if aspect_ratio in ("1:1", "16:9"):
+            eff_font_size = int(eff_font_size * 0.85)
         line_height = int(eff_font_size * 1.20)
         caption_font = self._get_font(eff_font_size)
 
@@ -328,12 +356,16 @@ class VideoRenderService:
         total_text_h = len(lines) * line_height
         pos = (caption_position or "bottom").lower()
         if "top" in pos:
-            y_start = 320
+            y_start = 200 if aspect_ratio != "9:16" else 320
         elif "center" in pos and "bottom" not in pos and "top" not in pos:
             y_start = (height - total_text_h) // 2
         else:
-            # Default: standard viral lower-third (centered in bottom 1200-1550 safe zone)
-            y_start = max(1000, min(1480 - total_text_h, 1420 - total_text_h))
+            if aspect_ratio == "1:1":
+                y_start = max(600, 860 - total_text_h)
+            elif aspect_ratio == "16:9":
+                y_start = max(620, 880 - total_text_h)
+            else:
+                y_start = max(1000, min(1480 - total_text_h, 1420 - total_text_h))
         y = y_start
 
         for idx, line in enumerate(lines):
@@ -341,11 +373,9 @@ class VideoRenderService:
             line_w = bbox[2] - bbox[0]
             x = (width - line_w) // 2
 
-            # Check if any word in this line is an active highlight
             line_has_emphasis = any(w in emphasis_words for w in line.split()) or (scene_idx == 0 and idx == 0)
             highlight_color = (*custom_h_rgb, 255) if line_has_emphasis else (255, 255, 255, 255)
 
-            # High-contrast backdrop pill for readability over any footage
             if caption_style == "pill":
                 pill_pad_x = 24
                 pill_pad_y = 6
@@ -355,9 +385,7 @@ class VideoRenderService:
                     fill=(8, 10, 16, 180),
                 )
 
-            # Drop shadow
             draw.text((x + 3, y + 4), line, font=caption_font, fill=(0, 0, 0, 220))
-            # Main bold text with thick black outline
             stroke_w = 7 if caption_style != "minimal" else 3
             draw.text((x, y), line, font=caption_font, fill=highlight_color, stroke_width=stroke_w, stroke_fill=(10, 10, 12, 255))
             y += line_height
@@ -644,6 +672,258 @@ class VideoRenderService:
 
         return job
 
+    def get_or_load_blueprint(self, blueprint_id: str) -> Optional[VideoProductionBlueprint]:
+        """Retrieves active blueprint from memory cache or loads from storage clips directory."""
+        if blueprint_id in self.blueprints:
+            return self.blueprints[blueprint_id]
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
+        bp_json_path = os.path.join(bp_clips_dir, "blueprint.json")
+        if os.path.exists(bp_json_path):
+            try:
+                with open(bp_json_path, "r", encoding="utf-8") as f:
+                    bp = VideoProductionBlueprint(**json.load(f))
+                    self.blueprints[blueprint_id] = bp
+                    return bp
+            except Exception as e:
+                logger.error("Failed loading cached blueprint %s: %s", blueprint_id, e)
+        return None
+
+    def restitch_master_video(self, blueprint_id: str) -> RenderJobStatus:
+        """Re-concatenates all valid scene clips in current order into the final master video."""
+        blueprint = self.get_or_load_blueprint(blueprint_id)
+        if not blueprint:
+            raise ValueError(f"Blueprint '{blueprint_id}' not found")
+
+        job = self.get_job(blueprint_id)
+        if not job:
+            job = self.create_job(blueprint)
+
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
+        ffmpeg_bin = get_ffmpeg_binary()
+
+        all_scene_paths = []
+        for i in range(len(blueprint.scenes)):
+            spath = os.path.join(bp_clips_dir, f"scene_{i}.mp4")
+            if os.path.exists(spath):
+                all_scene_paths.append(spath)
+
+        if len(all_scene_paths) == len(blueprint.scenes) and len(all_scene_paths) > 0:
+            concat_list = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_reconcat.txt")
+            with open(concat_list, "w", encoding="utf-8") as f:
+                for p in all_scene_paths:
+                    safe_p = p.replace("\\", "/")
+                    f.write(f"file '{safe_p}'\n")
+
+            final_mp4 = os.path.join(self.video_dir, f"{blueprint.blueprint_id}.mp4")
+            concat_cmd = [
+                ffmpeg_bin, "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concat_list,
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-avoid_negative_ts", "make_zero",
+                final_mp4,
+            ]
+            subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            if os.path.exists(final_mp4):
+                job.file_size_mb = round(os.stat(final_mp4).st_size / (1024 * 1024), 2)
+                job.duration_seconds = sum(s.duration_seconds for s in blueprint.scenes)
+                job.output_path = f"/storage/videos/{blueprint.blueprint_id}.mp4"
+
+        # Update thumbnail from first scene
+        first_thumb = os.path.join(bp_clips_dir, "scene_0_thumb.jpg")
+        final_thumb = os.path.join(self.image_dir, f"{blueprint.blueprint_id}_thumb.jpg")
+        if os.path.exists(first_thumb):
+            try:
+                shutil.copyfile(first_thumb, final_thumb)
+                job.thumbnail_path = f"/storage/images/{blueprint.blueprint_id}_thumb.jpg"
+            except Exception:
+                pass
+
+        # Update scene_clips in job
+        job.scene_clips = self.get_scene_clips(blueprint_id, refresh=True)
+
+        # Persist blueprint
+        with open(os.path.join(bp_clips_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+            f.write(blueprint.model_dump_json(indent=2))
+
+        job.status = "complete"
+        job.progress_pct = 100.0
+        job.current_step = "Video timeline re-stitched successfully!"
+        return job
+
+    def reorder_scenes(self, blueprint_id: str, from_idx: int, to_idx: int) -> RenderJobStatus:
+        """Shifts a scene from one position to another in the storyboard timeline and re-indexes clips."""
+        blueprint = self.get_or_load_blueprint(blueprint_id)
+        if not blueprint:
+            raise ValueError(f"Blueprint '{blueprint_id}' not found")
+        n = len(blueprint.scenes)
+        if from_idx < 0 or from_idx >= n or to_idx < 0 or to_idx >= n:
+            raise ValueError(f"Indices out of range: from_idx={from_idx}, to_idx={to_idx}, total={n}")
+        if from_idx == to_idx:
+            return self.get_job(blueprint_id) or self.restitch_master_video(blueprint_id)
+
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
+        suffixes = [".mp4", "_thumb.jpg", "_overlay.png", "_voice.wav"]
+
+        order = list(range(n))
+        val = order.pop(from_idx)
+        order.insert(to_idx, val)
+
+        # Rename all to temp swap files
+        for i in range(n):
+            for sfx in suffixes:
+                src = os.path.join(bp_clips_dir, f"scene_{i}{sfx}")
+                tmp = os.path.join(bp_clips_dir, f"_swap_{i}{sfx}")
+                if os.path.exists(src):
+                    os.rename(src, tmp)
+
+        # Move to new indexed positions
+        for new_idx, old_idx in enumerate(order):
+            for sfx in suffixes:
+                tmp = os.path.join(bp_clips_dir, f"_swap_{old_idx}{sfx}")
+                dst = os.path.join(bp_clips_dir, f"scene_{new_idx}{sfx}")
+                if os.path.exists(tmp):
+                    os.rename(tmp, dst)
+
+        moved_scene = blueprint.scenes.pop(from_idx)
+        blueprint.scenes.insert(to_idx, moved_scene)
+
+        with open(os.path.join(bp_clips_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+            f.write(blueprint.model_dump_json(indent=2))
+
+        return self.restitch_master_video(blueprint_id)
+
+    def delete_scene(self, blueprint_id: str, scene_idx: int) -> RenderJobStatus:
+        """Deletes a scene from the blueprint, shifts remaining clip files, and re-stitches master video."""
+        blueprint = self.get_or_load_blueprint(blueprint_id)
+        if not blueprint:
+            raise ValueError(f"Blueprint '{blueprint_id}' not found")
+        n = len(blueprint.scenes)
+        if n <= 1:
+            raise ValueError("Cannot delete the only remaining scene in a video")
+        if scene_idx < 0 or scene_idx >= n:
+            raise ValueError(f"Scene index {scene_idx} out of range (0-{n-1})")
+
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
+        suffixes = [".mp4", "_thumb.jpg", "_overlay.png", "_voice.wav"]
+
+        for sfx in suffixes:
+            fpath = os.path.join(bp_clips_dir, f"scene_{scene_idx}{sfx}")
+            if os.path.exists(fpath):
+                try:
+                    os.remove(fpath)
+                except Exception:
+                    pass
+
+        for i in range(scene_idx + 1, n):
+            for sfx in suffixes:
+                src = os.path.join(bp_clips_dir, f"scene_{i}{sfx}")
+                dst = os.path.join(bp_clips_dir, f"scene_{i-1}{sfx}")
+                if os.path.exists(src):
+                    os.rename(src, dst)
+
+        blueprint.scenes.pop(scene_idx)
+        with open(os.path.join(bp_clips_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+            f.write(blueprint.model_dump_json(indent=2))
+
+        return self.restitch_master_video(blueprint_id)
+
+    def duplicate_scene(self, blueprint_id: str, scene_idx: int) -> RenderJobStatus:
+        """Clones an existing scene, inserts it after the scene, shifts files, and re-stitches video."""
+        blueprint = self.get_or_load_blueprint(blueprint_id)
+        if not blueprint:
+            raise ValueError(f"Blueprint '{blueprint_id}' not found")
+        n = len(blueprint.scenes)
+        if scene_idx < 0 or scene_idx >= n:
+            raise ValueError(f"Scene index {scene_idx} out of range (0-{n-1})")
+
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
+        suffixes = [".mp4", "_thumb.jpg", "_overlay.png", "_voice.wav"]
+        target_idx = scene_idx + 1
+
+        for i in range(n - 1, scene_idx, -1):
+            for sfx in suffixes:
+                src = os.path.join(bp_clips_dir, f"scene_{i}{sfx}")
+                dst = os.path.join(bp_clips_dir, f"scene_{i+1}{sfx}")
+                if os.path.exists(src):
+                    os.rename(src, dst)
+
+        for sfx in suffixes:
+            src = os.path.join(bp_clips_dir, f"scene_{scene_idx}{sfx}")
+            dst = os.path.join(bp_clips_dir, f"scene_{target_idx}{sfx}")
+            if os.path.exists(src):
+                shutil.copyfile(src, dst)
+
+        cloned_scene = blueprint.scenes[scene_idx].model_copy(deep=True)
+        cloned_scene.scene_id = f"{cloned_scene.scene_id}_copy"
+        blueprint.scenes.insert(target_idx, cloned_scene)
+
+        with open(os.path.join(bp_clips_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+            f.write(blueprint.model_dump_json(indent=2))
+
+        return self.restitch_master_video(blueprint_id)
+
+    def add_scene(self, blueprint_id: str, req) -> RenderJobStatus:
+        """Appends or inserts a brand new scene into the video blueprint and renders it."""
+        from app.schemas.video import SceneVisual, SceneAudio, EmotionalBeat
+        blueprint = self.get_or_load_blueprint(blueprint_id)
+        if not blueprint:
+            raise ValueError(f"Blueprint '{blueprint_id}' not found")
+
+        n = len(blueprint.scenes)
+        target_idx = req.scene_idx if req.scene_idx is not None else n
+        target_idx = max(0, min(n, target_idx))
+
+        bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
+        suffixes = [".mp4", "_thumb.jpg", "_overlay.png", "_voice.wav"]
+
+        if target_idx < n:
+            for i in range(n - 1, target_idx - 1, -1):
+                for sfx in suffixes:
+                    src = os.path.join(bp_clips_dir, f"scene_{i}{sfx}")
+                    dst = os.path.join(bp_clips_dir, f"scene_{i+1}{sfx}")
+                    if os.path.exists(src):
+                        os.rename(src, dst)
+
+        beat = EmotionalBeat.ESCALATION
+        for b in EmotionalBeat:
+            if b.value == req.emotional_beat.lower():
+                beat = b
+                break
+
+        new_scene = SceneNode(
+            scene_id=f"scene_{int(datetime.now().timestamp())}",
+            emotional_beat=beat,
+            duration_seconds=3.5,
+            visual=SceneVisual(
+                description=req.voiceover_text[:60],
+                search_keywords=req.search_keywords or [req.emotional_beat, "creator", "digital"],
+                camera_motion=req.camera_motion or "slow_zoom_in",
+            ),
+            audio=SceneAudio(
+                voiceover_text=req.voiceover_text,
+                sfx_cue="whoosh",
+            ),
+        )
+        blueprint.scenes.insert(target_idx, new_scene)
+        with open(os.path.join(bp_clips_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+            f.write(blueprint.model_dump_json(indent=2))
+
+        return self.render_single_scene(
+            blueprint_id=blueprint_id,
+            scene_idx=target_idx,
+            update=SceneUpdateRequest(
+                voiceover_text=req.voiceover_text,
+                search_keywords=req.search_keywords,
+                camera_motion=req.camera_motion,
+            ),
+        )
+
     def render_single_scene(
         self,
         blueprint_id: str,
@@ -696,13 +976,15 @@ class VideoRenderService:
         scene_mp4 = os.path.join(bp_clips_dir, f"scene_{scene_idx}.mp4")
         scene_thumb = os.path.join(bp_clips_dir, f"scene_{scene_idx}_thumb.jpg")
 
-        # Step 1: Synthesize voiceover FIRST with natural speech timing
-        natural_duration = self._calculate_natural_speech_duration(scene.audio.voiceover_text)
+        # Step 1: Synthesize voiceover FIRST with natural speech timing and custom speed
+        speed = update.voice_speed or 1.0
+        natural_duration = self._calculate_natural_speech_duration(scene.audio.voiceover_text) / speed
         voice_service.generate_voiceover(
             text=scene.audio.voiceover_text,
             worker_id=blueprint.worker_id,
             duration_sec=natural_duration,
             output_path=scene_voice,
+            voice_speed=speed,
         )
 
         # Step 2: Measure EXACT voiceover duration and lock scene duration to prevent audio cut-off
@@ -711,6 +993,22 @@ class VideoRenderService:
         scene.duration_seconds = duration
 
         # Step 3: Visual background: if custom asset provided, use it directly
+        filter_clause = ""
+        if update.visual_filter == "vibrant":
+            filter_clause = ",eq=saturation=1.35:contrast=1.12:brightness=0.02"
+        elif update.visual_filter == "cinematic":
+            filter_clause = ",eq=saturation=0.88:contrast=1.22:brightness=-0.02,colorbalance=rs=0.06:bs=-0.04"
+        elif update.visual_filter == "cyberpunk":
+            filter_clause = ",eq=saturation=1.45:contrast=1.20,colorbalance=bs=0.22:rm=-0.08"
+
+        aspect = update.aspect_ratio or "9:16"
+        scale_w, scale_h = 1080, 1920
+        if aspect == "1:1":
+            scale_w, scale_h = 1080, 1080
+        elif aspect == "16:9":
+            scale_w, scale_h = 1920, 1080
+        vf_base = f"scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,crop={scale_w}:{scale_h},setsar=1{filter_clause}"
+
         if update.custom_asset_path and os.path.exists(update.custom_asset_path):
             if update.custom_asset_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
                 material_service.convert_image_to_motion_video(
@@ -725,7 +1023,7 @@ class VideoRenderService:
                     "-stream_loop", "-1",
                     "-i", update.custom_asset_path,
                     "-t", str(duration),
-                    "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",
+                    "-vf", vf_base,
                     "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
                     "-an",
                     scene_bg_video,
@@ -742,6 +1040,19 @@ class VideoRenderService:
                 scene_idx=scene_idx,
                 camera_motion=scene.visual.camera_motion,
             )
+            if filter_clause:
+                tmp_f = scene_bg_video + ".filtered.mp4"
+                f_cmd = [
+                    ffmpeg_bin, "-y",
+                    "-i", scene_bg_video,
+                    "-vf", filter_clause.lstrip(","),
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                    "-c:a", "copy",
+                    tmp_f,
+                ]
+                subprocess.run(f_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if os.path.exists(tmp_f) and os.path.getsize(tmp_f) > 1024:
+                    shutil.move(tmp_f, scene_bg_video)
 
         # Step 4: Render transparent subtitle and HUD overlay with custom options
         self._render_scene_overlay(
@@ -754,10 +1065,12 @@ class VideoRenderService:
             caption_font_size=update.caption_font_size,
             caption_highlight_color=update.caption_highlight_color,
             caption_style=update.caption_style or "pill",
+            aspect_ratio=aspect,
         )
 
         # Step 5: Ambient BGM & zero-bleed audio mixing
-        self._generate_ambient_bgm(duration_sec=duration, output_path=scene_bgm)
+        bgm_name = update.bgm_track or "cyber_beat"
+        self._generate_ambient_bgm(duration_sec=duration, output_path=scene_bgm, track_name=bgm_name)
         fade_start = max(0.0, round(duration - 0.40, 2))
         sfx_path = sfx_service.get_sfx_path(update.sfx_cue or scene.audio.sfx_cue)
         if sfx_path and os.path.exists(sfx_path):
@@ -849,57 +1162,22 @@ class VideoRenderService:
             job.scene_clips.append(artifact)
             job.scene_clips.sort(key=lambda x: x.scene_idx)
 
-        # Re-stitch master video from all scene_{i}.mp4 files
-        all_scene_paths = []
-        for i in range(len(blueprint.scenes)):
-            spath = os.path.join(bp_clips_dir, f"scene_{i}.mp4")
-            if os.path.exists(spath):
-                all_scene_paths.append(spath)
-
-        if len(all_scene_paths) == len(blueprint.scenes):
-            concat_list = os.path.join(self.temp_dir, f"{blueprint.blueprint_id}_reconcat.txt")
-            with open(concat_list, "w", encoding="utf-8") as f:
-                for p in all_scene_paths:
-                    safe_p = p.replace("\\", "/")
-                    f.write(f"file '{safe_p}'\n")
-
-            final_mp4 = os.path.join(self.video_dir, f"{blueprint.blueprint_id}.mp4")
-            concat_cmd = [
-                ffmpeg_bin, "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", concat_list,
-                "-c:v", "libx264",
-                "-preset", "ultrafast",
-                "-pix_fmt", "yuv420p",
-                "-c:a", "aac",
-                "-b:a", "192k",
-                "-avoid_negative_ts", "make_zero",
-                final_mp4,
-            ]
-            subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-            if os.path.exists(final_mp4):
-                job.file_size_mb = round(os.stat(final_mp4).st_size / (1024 * 1024), 2)
-
-        # Persist updated blueprint
+        # Persist updated blueprint & restitch master video
         with open(os.path.join(bp_clips_dir, "blueprint.json"), "w", encoding="utf-8") as f:
             f.write(blueprint.model_dump_json(indent=2))
 
-        job.status = "complete"
-        job.progress_pct = 100.0
-        job.current_step = f"Scene {scene_idx + 1} updated and master video re-stitched successfully!"
-        return job
+        return self.restitch_master_video(blueprint_id)
 
-    def get_scene_clips(self, blueprint_id: str) -> List[SceneClipArtifact]:
+    def get_scene_clips(self, blueprint_id: str, refresh: bool = False) -> List[SceneClipArtifact]:
         """Returns the list of scene clip artifacts for a blueprint."""
-        job = self.get_job(blueprint_id)
-        if job and job.scene_clips:
-            return job.scene_clips
-
-        # Inspect disk
         bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
         if not os.path.exists(bp_clips_dir):
             return []
+
+        blueprint = self.get_or_load_blueprint(blueprint_id)
+        job = self.get_job(blueprint_id)
+        if not refresh and job and job.scene_clips and blueprint and len(job.scene_clips) == len(blueprint.scenes):
+            return job.scene_clips
 
         results = []
         blueprint = self.blueprints.get(blueprint_id)

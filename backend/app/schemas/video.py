@@ -58,6 +58,7 @@ class AudioDirective(BaseModel):
     voice_tone: Literal["neutral", "excited", "serious", "conspiratorial", "urgent", "calm"] = "neutral"
     sfx_cue: Optional[str] = Field(None, description="Sound effect trigger: whoosh, impact, notification, suspense_sting, reveal_chime")
     music_energy: Literal["low", "building", "peak", "drop", "silence"] = "building"
+    bgm_track: Optional[str] = Field("cyber_beat", description="Background lo-fi ambient track name")
 
 class SceneNode(BaseModel):
     """A single scene in the video's story graph."""
@@ -262,6 +263,27 @@ class SceneUpdateRequest(BaseModel):
     caption_highlight_color: Optional[str] = None
     caption_style: Optional[Literal["pill", "outline", "minimal"]] = None
     sfx_cue: Optional[str] = None
+    voice_speed: Optional[float] = None
+    bgm_track: Optional[str] = None
+    visual_filter: Optional[Literal["none", "vibrant", "cinematic", "cyberpunk"]] = None
+    aspect_ratio: Optional[Literal["9:16", "1:1", "16:9"]] = None
+
+
+class SceneReorderRequest(BaseModel):
+    from_idx: int
+    to_idx: int
+
+
+class SceneAddRequest(BaseModel):
+    scene_idx: Optional[int] = None
+    voiceover_text: str
+    search_keywords: List[str] = Field(default_factory=list)
+    camera_motion: str = "slow_zoom_in"
+    emotional_beat: str = "escalation"
+
+
+class EnhanceScriptRequest(BaseModel):
+    style: Literal["punchy", "curiosity_gap", "controversial", "conversational"] = "punchy"
 
 
 class StockMaterialItem(BaseModel):

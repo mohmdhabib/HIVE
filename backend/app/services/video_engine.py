@@ -27,6 +27,7 @@ produces the BLUEPRINT that the renderer consumes.
 import re
 import json
 import uuid
+import asyncio
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -566,8 +567,9 @@ class VideoIntelligenceEngine:
 
         if llm is not None:
             try:
-                script_result = await self._generate_script_with_llm(
-                    llm, worker, trend_title, trend_summary
+                script_result = await asyncio.wait_for(
+                    self._generate_script_with_llm(llm, worker, trend_title, trend_summary),
+                    timeout=3.0,
                 )
                 if script_result:
                     hook_text = script_result.get("hook", hook_text)
@@ -575,7 +577,7 @@ class VideoIntelligenceEngine:
                     cta_text = script_result.get("cta", cta_text)
                     description = script_result.get("description", description)
             except Exception as e:
-                logger.warning("LLM script generation failed, using heuristic: %s", e)
+                logger.warning("LLM script generation failed or timed out, using heuristic: %s", e)
 
         if not body_points:
             body_points = [
@@ -658,6 +660,58 @@ class VideoIntelligenceEngine:
             status="queued",
             progress_pct=0.0,
         )
+
+    async def enhance_scene_script(
+        self,
+        current_text: str,
+        emotional_beat: str,
+        style: str = "punchy",
+        llm: Optional[LLMService] = None,
+    ) -> str:
+        """Uses LLM or algorithmic viral copywriting formulas to rewrite a scene script for maximum viewer retention."""
+        if llm:
+            try:
+                system_prompt = (
+                    "You are an elite short-form video copywriter (MrBeast, Alex Hormozi style).\n"
+                    "Your task is to rewrite a single scene's spoken narration line.\n"
+                    "RULES:\n"
+                    "1. Maximum 1-2 punchy sentences (10-20 words total).\n"
+                    "2. Remove all filler, passive voice, and throat-clearing.\n"
+                    f"3. Style target: {style} (e.g. punchy = direct & urgent, curiosity_gap = cliffhanger intrigue, controversial = bold claim).\n"
+                    "4. Return ONLY the rewritten spoken line, nothing else."
+                )
+                user_prompt = f"Original line: '{current_text}' (Beat: {emotional_beat})"
+                enhanced = await asyncio.wait_for(
+                    llm.generate(prompt=user_prompt, system=system_prompt),
+                    timeout=3.0,
+                )
+                enhanced = enhanced.strip().strip('"').strip("'")
+                if len(enhanced) > 5 and len(enhanced.split()) <= 30:
+                    return enhanced
+            except Exception as e:
+                logger.debug("LLM script enhancement failed or timed out: %s", e)
+
+        # Algorithmic fallback
+        return self.enhance_script_sync(current_text=current_text, emotional_beat=emotional_beat, style=style)
+
+    def enhance_script_sync(
+        self,
+        current_text: str,
+        emotional_beat: str,
+        style: str = "punchy",
+    ) -> str:
+        """Algorithmic high-retention copywriting formulas to rewrite a scene script."""
+        clean = current_text.strip().rstrip(".")
+        if style == "punchy":
+            if not clean.startswith(("Stop", "Look", "Notice", "Here's")):
+                return f"Here is the truth: {clean.lower()}."
+            return f"{clean} Right now."
+        elif style == "curiosity_gap":
+            return f"Almost nobody realizes this, but {clean.lower()}."
+        elif style == "controversial":
+            return f"Most experts got this completely wrong: {clean.lower()}."
+        else:
+            return f"{clean}—and it changes everything."
 
 
 video_engine = VideoIntelligenceEngine()

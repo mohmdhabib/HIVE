@@ -59,13 +59,18 @@ class VoiceService:
             logger.info("Edge TTS offline or unreachable; using high-speed cadence speech synthesis.")
         return self._is_online
 
-    async def _generate_edge_tts(self, text: str, voice_name: str, output_path: str) -> bool:
+    async def _generate_edge_tts(self, text: str, voice_name: str, output_path: str, voice_speed: float = 1.0) -> bool:
         """Attempts neural voice synthesis using Microsoft Edge TTS, transcoding into clean 44.1kHz WAV."""
         try:
             import edge_tts
             ffmpeg_bin = get_ffmpeg_binary()
             tmp_mp3 = output_path + ".tmp.mp3"
-            communicate = edge_tts.Communicate(text, voice_name)
+            if abs(voice_speed - 1.0) >= 0.05:
+                rate_pct = int(round((voice_speed - 1.0) * 100))
+                rate_str = f"{rate_pct:+d}%"
+                communicate = edge_tts.Communicate(text, voice_name, rate=rate_str)
+            else:
+                communicate = edge_tts.Communicate(text, voice_name)
             await asyncio.wait_for(communicate.save(tmp_mp3), timeout=8.0)
             if os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 1024:
                 cmd = [
@@ -83,19 +88,21 @@ class VoiceService:
                     except Exception:
                         pass
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
-                    logger.info("Successfully generated Edge TTS voiceover with voice '%s'", voice_name)
+                    logger.info("Successfully generated Edge TTS voiceover with voice '%s' at %.2fx speed", voice_name, voice_speed)
                     return True
         except Exception as e:
             logger.debug("Edge TTS generation failed or timed out: %s", e)
         return False
 
-    def _generate_synthetic_cadence(self, text: str, duration_sec: float, output_path: str):
+    def _generate_synthetic_cadence(self, text: str, duration_sec: float, output_path: str, voice_speed: float = 1.0):
         """Synthesizes multi-harmonic cadence waveforms matching natural word pacing."""
         sample_rate = 44100
         words = text.split()
         num_words = max(1, len(words))
-        # Ensure duration gives each word at least 0.38 seconds for clear natural rhythm
-        effective_duration = max(duration_sec, num_words * 0.38)
+        # Ensure duration gives each word adequate time based on voice speed
+        effective_speed = max(0.5, min(2.5, voice_speed))
+        word_dur = 0.38 / effective_speed
+        effective_duration = max(duration_sec, num_words * word_dur)
         total_samples = int(sample_rate * effective_duration)
 
         samples_per_word = total_samples // num_words
@@ -135,6 +142,7 @@ class VoiceService:
         worker_id: str = "tech",
         duration_sec: float = 4.0,
         output_path: str = "",
+        voice_speed: float = 1.0,
     ) -> str:
         """Generates spoken voiceover audio using Edge TTS -> Cadence fallback."""
         voice_name = VOICE_MAP.get(worker_id, "en-US-ChristopherNeural")
@@ -142,14 +150,14 @@ class VoiceService:
         # 1. Try Edge TTS if online
         if self.is_edge_tts_available():
             try:
-                success = asyncio.run(self._generate_edge_tts(text, voice_name, output_path))
+                success = asyncio.run(self._generate_edge_tts(text, voice_name, output_path, voice_speed=voice_speed))
                 if success:
                     return output_path
             except Exception as exc:
                 logger.debug("Edge TTS attempt error: %s", exc)
 
         # 2. High-speed Cadence Fallback (Zero latency, instant generation)
-        self._generate_synthetic_cadence(text, duration_sec, output_path)
+        self._generate_synthetic_cadence(text, duration_sec, output_path, voice_speed=voice_speed)
         return output_path
 
 

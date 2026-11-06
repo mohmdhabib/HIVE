@@ -1,5 +1,6 @@
+import os
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from app.schemas.task import TaskRequest, TaskReport, TaskPlan
 from app.schemas.worker import WorkerConfig
@@ -15,6 +16,9 @@ from app.schemas.video import (
     RenderJobStatus,
     SceneClipArtifact,
     SceneUpdateRequest,
+    SceneAddRequest,
+    SceneReorderRequest,
+    EnhanceScriptRequest,
     StockMaterialItem,
 )
 from app.schemas.briefing import MasterExecutiveBriefing, WorkerPerformanceDigest
@@ -33,6 +37,7 @@ from app.services.trend_research import trend_research_service
 from app.services.video_engine import video_engine
 from app.services.video_renderer import video_renderer
 from app.services.material_service import material_service
+from app.services.sfx_service import sfx_service
 from app.services.master_briefing import master_briefing_service
 from app.dependencies import get_llm_service
 from app.config import Settings, get_settings
@@ -280,6 +285,124 @@ async def regenerate_single_scene_endpoint(
 @router.get("/video/stock-materials", response_model=list[StockMaterialItem])
 async def list_stock_materials_endpoint(worker_id: str | None = None):
     return material_service.list_stock_materials(worker_id=worker_id)
+
+@router.get("/video/blueprint/{blueprint_id}", response_model=VideoProductionBlueprint)
+async def get_video_blueprint_endpoint(blueprint_id: str):
+    bp = video_renderer.get_or_load_blueprint(blueprint_id)
+    if not bp:
+        raise HTTPException(status_code=404, detail=f"Blueprint '{blueprint_id}' not found")
+    return bp
+
+@router.post("/video/blueprint/{blueprint_id}/scene/reorder", response_model=RenderJobStatus)
+async def reorder_scenes_endpoint(blueprint_id: str, req: SceneReorderRequest):
+    try:
+        return video_renderer.reorder_scenes(blueprint_id, req.from_idx, req.to_idx)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("Error reordering scenes for %s", blueprint_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/video/blueprint/{blueprint_id}/scene/add", response_model=RenderJobStatus)
+async def add_scene_endpoint(blueprint_id: str, req: SceneAddRequest):
+    try:
+        return video_renderer.add_scene(blueprint_id, req)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("Error adding scene to %s", blueprint_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.delete("/video/blueprint/{blueprint_id}/scene/{scene_idx}", response_model=RenderJobStatus)
+async def delete_scene_endpoint(blueprint_id: str, scene_idx: int):
+    try:
+        return video_renderer.delete_scene(blueprint_id, scene_idx)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("Error deleting scene %d from %s", scene_idx, blueprint_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/video/blueprint/{blueprint_id}/scene/{scene_idx}/duplicate", response_model=RenderJobStatus)
+async def duplicate_scene_endpoint(blueprint_id: str, scene_idx: int):
+    try:
+        return video_renderer.duplicate_scene(blueprint_id, scene_idx)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("Error duplicating scene %d for %s", scene_idx, blueprint_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/video/blueprint/{blueprint_id}/scene/{scene_idx}/enhance-script")
+async def enhance_scene_script_endpoint(
+    blueprint_id: str,
+    scene_idx: int,
+    req: EnhanceScriptRequest,
+    llm: LLMService = Depends(get_llm_service),
+):
+    try:
+        blueprint = video_renderer.get_or_load_blueprint(blueprint_id)
+        if not blueprint:
+            raise HTTPException(status_code=404, detail="Blueprint not found")
+        if scene_idx < 0 or scene_idx >= len(blueprint.scenes):
+            raise HTTPException(status_code=400, detail="Scene index out of range")
+
+        current_text = blueprint.scenes[scene_idx].audio.voiceover_text
+        enhanced = await video_engine.enhance_scene_script(
+            current_script=current_text,
+            style=req.style,
+            worker_id=blueprint.worker_id,
+            llm=llm,
+        )
+        return {"original_script": current_text, "enhanced_script": enhanced, "style": req.style}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Error enhancing script")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/video/upload-asset", response_model=StockMaterialItem)
+async def upload_video_asset(
+    file: UploadFile = File(...),
+    niche: str = Form("tech"),
+    tags: str = Form(""),
+):
+    try:
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        storage_dir = os.path.join(base_dir, "storage")
+        stock_dir = os.path.join(storage_dir, "materials", "stock_images")
+        os.makedirs(stock_dir, exist_ok=True)
+
+        clean_name = file.filename.replace(" ", "_") if file.filename else "asset.jpg"
+        filename = f"upload_{int(datetime.now().timestamp())}_{clean_name}"
+        target_path = os.path.join(stock_dir, filename)
+
+        with open(target_path, "wb") as f:
+            contents = await file.read()
+            f.write(contents)
+
+        asset_type = "video" if filename.lower().endswith((".mp4", ".mov", ".webm")) else "image"
+        tag_list = [t.strip().lower() for t in tags.split(",") if t.strip()]
+        if not tag_list:
+            tag_list = [niche, "upload", "custom"]
+
+        rel_url = f"/storage/materials/stock_images/{filename}"
+        return StockMaterialItem(
+            filename=filename,
+            asset_type=asset_type,
+            file_path=target_path,
+            relative_url=rel_url,
+            thumbnail_url=rel_url,
+            niche=niche,
+            tags=tag_list,
+        )
+    except Exception as exc:
+        logger.exception("Error uploading media asset")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/video/sfx-catalog")
+async def get_sfx_catalog():
+    return sfx_service.list_available_sfx()
 
 # ============================================================================
 # AUTOMATED MEDIA HARVESTER & VAULT

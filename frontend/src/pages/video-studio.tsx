@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Clapperboard,
   Clock,
+  Copy,
   Download,
   ExternalLink,
   Eye,
@@ -39,6 +40,7 @@ import {
   Music,
   Palette,
   Play,
+  Plus,
   RefreshCw,
   RotateCw,
   Scissors,
@@ -46,10 +48,13 @@ import {
   Sliders,
   Sparkles,
   Target,
+  Trash2,
   TrendingUp,
   Type,
+  Upload,
   Video,
   Volume2,
+  Wand2,
   X,
   Zap,
 } from "lucide-react";
@@ -108,6 +113,22 @@ export default function VideoStudioPage() {
   const [isAssetPickerOpen, setIsAssetPickerOpen] = useState<boolean>(false);
   const sceneVideoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Advanced Video Engine & Timeline Controls
+  const [timelineMode, setTimelineMode] = useState<"storyboard" | "multitrack">("multitrack");
+  const [isAddSceneModalOpen, setIsAddSceneModalOpen] = useState(false);
+  const [newSceneVoiceover, setNewSceneVoiceover] = useState("");
+  const [newSceneKeywords, setNewSceneKeywords] = useState("");
+  const [newSceneBeat, setNewSceneBeat] = useState("escalation");
+  const [newSceneMotion, setNewSceneMotion] = useState("slow_zoom_in");
+
+  const [editedVoiceSpeed, setEditedVoiceSpeed] = useState<number>(1.0);
+  const [editedBgmTrack, setEditedBgmTrack] = useState<string>("cyber_beat");
+  const [editedVisualFilter, setEditedVisualFilter] = useState<"none" | "vibrant" | "cinematic" | "cyberpunk">("none");
+  const [editedAspectRatio, setEditedAspectRatio] = useState<"9:16" | "1:1" | "16:9">("9:16");
+  const [editedSfxCue, setEditedSfxCue] = useState<string>("whoosh");
+  const [scriptStyle, setScriptStyle] = useState<"punchy" | "curiosity_gap" | "controversial" | "conversational">("punchy");
+  const assetFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const activeWorker = workers.find((w) => w.id === selectedWorkerId) || workers[0];
 
   // Video Library Query
@@ -129,6 +150,12 @@ export default function VideoStudioPage() {
   const { data: stockMaterials = [] } = useQuery({
     queryKey: ["stock-materials", selectedWorkerId],
     queryFn: () => api.stockMaterials(selectedWorkerId || undefined),
+  });
+
+  // SFX Catalog Query
+  const { data: sfxCatalog = [] } = useQuery({
+    queryKey: ["sfx-catalog"],
+    queryFn: api.sfxCatalog,
   });
 
   // Scene Clips Query
@@ -157,6 +184,11 @@ export default function VideoStudioPage() {
       setEditedHighlightColor("#FFE600");
       setEditedFontSize(72);
       setEditedCaptionStyle("pill");
+      setEditedVoiceSpeed(1.0);
+      setEditedBgmTrack(selectedScene.audio.bgm_track || "cyber_beat");
+      setEditedVisualFilter("none");
+      setEditedAspectRatio("9:16");
+      setEditedSfxCue(selectedScene.audio.sfx_cue || "whoosh");
       setIsAssetPickerOpen(false);
     }
   }, [selectedSceneId, selectedScene]);
@@ -192,12 +224,121 @@ export default function VideoStudioPage() {
         caption_font_size: editedFontSize,
         caption_highlight_color: editedHighlightColor,
         caption_style: editedCaptionStyle,
+        voice_speed: editedVoiceSpeed,
+        bgm_track: editedBgmTrack,
+        visual_filter: editedVisualFilter,
+        aspect_ratio: editedAspectRatio,
+        sfx_cue: editedSfxCue,
       });
     },
-    onSuccess: (updatedJob) => {
+    onSuccess: async (updatedJob) => {
       setRenderJob(updatedJob);
+      if (blueprint) {
+        const updatedBp = await api.getBlueprint(blueprint.blueprint_id);
+        setBlueprint(updatedBp);
+      }
       refetchClips();
       queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    },
+  });
+
+  // Reorder Scene Mutation
+  const reorderSceneMutation = useMutation({
+    mutationFn: ({ fromIdx, toIdx }: { fromIdx: number; toIdx: number }) => {
+      if (!blueprint) return Promise.reject("No blueprint");
+      return api.reorderScene(blueprint.blueprint_id, fromIdx, toIdx);
+    },
+    onSuccess: async (updatedJob) => {
+      setRenderJob(updatedJob);
+      if (blueprint) {
+        const updatedBp = await api.getBlueprint(blueprint.blueprint_id);
+        setBlueprint(updatedBp);
+      }
+      refetchClips();
+      queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    },
+  });
+
+  // Delete Scene Mutation
+  const deleteSceneMutation = useMutation({
+    mutationFn: (sceneIdx: number) => {
+      if (!blueprint) return Promise.reject("No blueprint");
+      return api.deleteScene(blueprint.blueprint_id, sceneIdx);
+    },
+    onSuccess: async (updatedJob) => {
+      setRenderJob(updatedJob);
+      if (blueprint) {
+        const updatedBp = await api.getBlueprint(blueprint.blueprint_id);
+        setBlueprint(updatedBp);
+        if (updatedBp.scenes.length > 0) {
+          setSelectedSceneId(updatedBp.scenes[0].scene_id);
+        }
+      }
+      refetchClips();
+      queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    },
+  });
+
+  // Duplicate Scene Mutation
+  const duplicateSceneMutation = useMutation({
+    mutationFn: (sceneIdx: number) => {
+      if (!blueprint) return Promise.reject("No blueprint");
+      return api.duplicateScene(blueprint.blueprint_id, sceneIdx);
+    },
+    onSuccess: async (updatedJob) => {
+      setRenderJob(updatedJob);
+      if (blueprint) {
+        const updatedBp = await api.getBlueprint(blueprint.blueprint_id);
+        setBlueprint(updatedBp);
+      }
+      refetchClips();
+      queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    },
+  });
+
+  // Add Scene Mutation
+  const addSceneMutation = useMutation({
+    mutationFn: () => {
+      if (!blueprint) return Promise.reject("No blueprint");
+      return api.addScene(blueprint.blueprint_id, {
+        voiceover_text: newSceneVoiceover.trim(),
+        search_keywords: newSceneKeywords.split(",").map((k) => k.trim()).filter(Boolean),
+        camera_motion: newSceneMotion,
+        emotional_beat: newSceneBeat,
+      });
+    },
+    onSuccess: async (updatedJob) => {
+      setRenderJob(updatedJob);
+      if (blueprint) {
+        const updatedBp = await api.getBlueprint(blueprint.blueprint_id);
+        setBlueprint(updatedBp);
+      }
+      refetchClips();
+      setIsAddSceneModalOpen(false);
+      setNewSceneVoiceover("");
+      setNewSceneKeywords("");
+      queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    },
+  });
+
+  // Enhance Script with AI Mutation
+  const enhanceScriptMutation = useMutation({
+    mutationFn: () => {
+      if (!blueprint || selectedSceneIndex < 0) return Promise.reject("No scene selected");
+      return api.enhanceScript(blueprint.blueprint_id, selectedSceneIndex, scriptStyle);
+    },
+    onSuccess: (res) => {
+      setEditedVoiceover(res.enhanced_script);
+    },
+  });
+
+  // Upload Media Asset Mutation
+  const uploadAssetMutation = useMutation({
+    mutationFn: (file: File) => api.uploadAsset(file, selectedWorkerId || "tech"),
+    onSuccess: (item) => {
+      queryClient.invalidateQueries({ queryKey: ["stock-materials"] });
+      setSelectedVaultAsset(item.file_path);
+      setIsAssetPickerOpen(false);
     },
   });
 
@@ -890,102 +1031,435 @@ export default function VideoStudioPage() {
           {/* SCENE CLIPS & INTERACTIVE VIDEO EDITOR PANEL */}
           {activePanel === "scenes" && (
             <div className="space-y-6">
-              {/* Top Storyboard Strip: Horizontal Visual Scene Cards */}
-              <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+              {/* Top Storyboard & Multi-Track Studio Timeline */}
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Scissors size={15} className="text-hive" />
                     <span className="font-mono text-xs font-semibold text-gray-200">
-                      INTERACTIVE STORYBOARD & CLIP REPOSITORY
+                      STUDIO TIMELINE & MULTI-TRACK ENGINE
                     </span>
-                    <span className="rounded bg-hive/10 px-2 py-0.5 font-mono text-[9px] text-hive border border-hive/20">
-                      {blueprint.scenes.length} INDEPENDENT SCENES
+                    <span className="rounded bg-hive/10 px-2 py-0.5 font-mono text-[9px] text-hive border border-hive/20 font-bold">
+                      {blueprint.scenes.length} SCENES • {blueprint.scenes.reduce((acc, s) => acc + s.duration_seconds, 0).toFixed(1)}S DURATION
                     </span>
                   </div>
-                  <span className="font-mono text-[10px] text-gray-400">
-                    Click any scene to inspect, play isolated clip, or edit & regenerate
-                  </span>
-                </div>
 
-                <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
-                  {blueprint.scenes.map((scene, i) => {
-                    const isActive = selectedSceneId === scene.scene_id;
-                    const clip = activeClips.find((c) => c.scene_idx === i);
-                    return (
+                  <div className="flex items-center gap-2">
+                    {/* View Switcher: Storyboard vs Multi-Track */}
+                    <div className="flex items-center rounded-lg border border-border bg-surface-deep p-0.5 font-mono text-[9px]">
                       <button
-                        key={scene.scene_id}
-                        onClick={() => setSelectedSceneId(scene.scene_id)}
+                        type="button"
+                        onClick={() => setTimelineMode("multitrack")}
                         className={cn(
-                          "group relative flex-shrink-0 w-44 rounded-xl border p-2.5 text-left transition-all",
-                          isActive
-                            ? "border-hive bg-hive/10 shadow-[0_0_20px_rgba(245,166,35,0.18)] scale-[1.02]"
-                            : "border-border bg-surface-deep hover:border-gray-500 hover:bg-surface"
+                          "rounded px-2.5 py-1 font-bold transition-colors",
+                          timelineMode === "multitrack"
+                            ? "bg-hive text-[#090b10] shadow"
+                            : "text-gray-400 hover:text-gray-200"
                         )}
                       >
-                        {/* Visual Thumbnail Frame */}
-                        <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-black border border-white/10 mb-2">
-                          {clip?.thumbnail_path ? (
-                            <img
-                              src={clip.thumbnail_path}
-                              alt={`Scene ${i + 1}`}
-                              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            />
-                          ) : clip?.overlay_path ? (
-                            <div className="h-full w-full bg-gradient-to-b from-[#151c2c] to-[#0c1017] p-2 flex flex-col items-center justify-center text-center">
-                              <img src={clip.overlay_path} alt="Overlay" className="max-h-full object-contain" />
-                            </div>
-                          ) : (
-                            <div className="h-full w-full bg-gradient-to-b from-[#182030] to-[#0d121c] p-2.5 flex flex-col items-center justify-center text-center space-y-1.5">
-                              <Film size={22} className="text-gray-600 group-hover:text-hive transition-colors" />
-                              <span className="font-mono text-[8px] text-gray-500 uppercase tracking-wider">
-                                {scene.visual.camera_motion.replace("_", " ")}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Hover Play Button Overlay */}
-                          {clip?.clip_path && (
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                              <span className="flex items-center gap-1 rounded-full bg-hive px-2.5 py-1 text-[9px] font-mono font-bold text-[#090b10] shadow-lg">
-                                <Play size={10} className="fill-current" />
-                                PLAY CLIP
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Beat Badge Top */}
-                          <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between pointer-events-none">
-                            <span className={cn("rounded px-1.5 py-0.5 text-[8px] font-mono font-bold border backdrop-blur-md shadow", BEAT_COLORS[scene.emotional_beat] || "")}>
-                              S{i + 1}: {scene.emotional_beat.toUpperCase()}
-                            </span>
-                            <span className="rounded bg-black/70 backdrop-blur-md px-1.5 py-0.5 text-[8px] font-mono text-gray-300 border border-white/10">
-                              {scene.duration_seconds.toFixed(1)}s
-                            </span>
-                          </div>
-
-                          {/* Ready / Status Badge Bottom */}
-                          <div className="absolute bottom-1.5 left-1.5 pointer-events-none">
-                            {clip?.clip_path ? (
-                              <span className="flex items-center gap-1 rounded bg-emerald-500/80 backdrop-blur-md px-1.5 py-0.5 text-[7px] font-mono text-white font-semibold">
-                                <Check size={8} />
-                                READY
-                              </span>
-                            ) : (
-                              <span className="rounded bg-black/60 backdrop-blur-md px-1.5 py-0.5 text-[7px] font-mono text-gray-400">
-                                PENDING
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Voiceover preview line */}
-                        <div className="text-[10px] text-gray-300 line-clamp-2 leading-tight">
-                          {scene.audio.voiceover_text}
-                        </div>
+                        MULTI-TRACK TIMELINE
                       </button>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        onClick={() => setTimelineMode("storyboard")}
+                        className={cn(
+                          "rounded px-2.5 py-1 font-bold transition-colors",
+                          timelineMode === "storyboard"
+                            ? "bg-hive text-[#090b10] shadow"
+                            : "text-gray-400 hover:text-gray-200"
+                        )}
+                      >
+                        STORYBOARD CARDS
+                      </button>
+                    </div>
+
+                    {/* Add Scene Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsAddSceneModalOpen(true)}
+                      className="flex items-center gap-1.5 rounded-lg bg-hive/20 border border-hive/40 px-3 py-1 font-mono text-[10px] font-bold text-hive hover:bg-hive/30 transition-colors"
+                    >
+                      <Plus size={12} />
+                      ADD SCENE
+                    </button>
+                  </div>
                 </div>
+
+                {/* VIEW 1: MULTI-TRACK TIMELINE */}
+                {timelineMode === "multitrack" ? (
+                  <div className="space-y-2 overflow-x-auto pb-2 scrollbar-thin">
+                    {/* Track 0: Ruler & Scene Controls */}
+                    <div className="flex items-center min-w-max">
+                      <div className="w-28 shrink-0 font-mono text-[9px] font-bold text-gray-400 flex items-center gap-1.5 pr-2">
+                        <Sliders size={12} className="text-hive" />
+                        <span>SEQUENCE</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {blueprint.scenes.map((scene, i) => {
+                          const isActive = selectedSceneId === scene.scene_id;
+                          return (
+                            <div
+                              key={scene.scene_id}
+                              className={cn(
+                                "w-48 shrink-0 rounded-lg border p-1.5 flex items-center justify-between text-xs transition-colors",
+                                isActive ? "border-hive bg-hive/15" : "border-border bg-surface-deep"
+                              )}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className={cn("rounded px-1.5 py-0.2 font-mono text-[8px] font-bold border", BEAT_COLORS[scene.emotional_beat] || "")}>
+                                  S{i + 1}
+                                </span>
+                                <span className="font-mono text-[9px] text-gray-300 font-semibold">{scene.duration_seconds.toFixed(1)}s</span>
+                              </div>
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => reorderSceneMutation.mutate({ fromIdx: i, toIdx: Math.max(0, i - 1) })}
+                                  disabled={i === 0 || reorderSceneMutation.isPending}
+                                  className="p-1 text-gray-400 hover:text-white disabled:opacity-20"
+                                  title="Move Left"
+                                >
+                                  <ChevronLeft size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => reorderSceneMutation.mutate({ fromIdx: i, toIdx: Math.min(blueprint.scenes.length - 1, i + 1) })}
+                                  disabled={i === blueprint.scenes.length - 1 || reorderSceneMutation.isPending}
+                                  className="p-1 text-gray-400 hover:text-white disabled:opacity-20"
+                                  title="Move Right"
+                                >
+                                  <ChevronRight size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => duplicateSceneMutation.mutate(i)}
+                                  disabled={duplicateSceneMutation.isPending}
+                                  className="p-1 text-gray-400 hover:text-hive"
+                                  title="Duplicate Scene"
+                                >
+                                  <Copy size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteSceneMutation.mutate(i)}
+                                  disabled={blueprint.scenes.length <= 1 || deleteSceneMutation.isPending}
+                                  className="p-1 text-gray-400 hover:text-red-400 disabled:opacity-20"
+                                  title="Delete Scene"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Track 1: Visuals Track (V1) */}
+                    <div className="flex items-center min-w-max">
+                      <div className="w-28 shrink-0 font-mono text-[9px] font-bold text-blue-400 flex items-center gap-1.5 pr-2">
+                        <Film size={12} />
+                        <span>VIDEO (V1)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {blueprint.scenes.map((scene, i) => {
+                          const isActive = selectedSceneId === scene.scene_id;
+                          const clip = activeClips.find((c) => c.scene_idx === i);
+                          return (
+                            <button
+                              key={scene.scene_id}
+                              type="button"
+                              onClick={() => setSelectedSceneId(scene.scene_id)}
+                              className={cn(
+                                "w-48 shrink-0 rounded-lg border h-16 relative overflow-hidden text-left p-1.5 transition-all flex items-center gap-2",
+                                isActive ? "border-hive ring-1 ring-hive" : "border-border bg-black/40 hover:border-gray-500"
+                              )}
+                            >
+                              <div className="w-10 h-13 rounded bg-black overflow-hidden shrink-0 border border-white/10 relative">
+                                {clip?.thumbnail_path ? (
+                                  <img src={clip.thumbnail_path} alt="Thumb" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-gray-600 bg-surface">
+                                    <Film size={12} />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="truncate flex-1">
+                                <span className="font-mono text-[8px] uppercase tracking-wider block text-blue-400 font-semibold truncate">
+                                  {scene.visual.camera_motion.replace("_", " ")}
+                                </span>
+                                <span className="text-[9px] text-gray-400 truncate block">
+                                  {scene.visual.search_keywords.slice(0, 2).join(", ")}
+                                </span>
+                                <span className="font-mono text-[7px] text-gray-500 uppercase">
+                                  {scene.visual.camera_motion}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Track 2: Subtitles Track (T1) */}
+                    <div className="flex items-center min-w-max">
+                      <div className="w-28 shrink-0 font-mono text-[9px] font-bold text-amber-400 flex items-center gap-1.5 pr-2">
+                        <Type size={12} />
+                        <span>CAPTIONS (T1)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {blueprint.scenes.map((scene) => {
+                          const isActive = selectedSceneId === scene.scene_id;
+                          return (
+                            <div
+                              key={scene.scene_id}
+                              onClick={() => setSelectedSceneId(scene.scene_id)}
+                              className={cn(
+                                "w-48 shrink-0 rounded-lg border h-10 px-2 flex items-center justify-between text-left cursor-pointer transition-colors",
+                                isActive ? "border-hive bg-amber-500/10" : "border-border bg-surface-deep hover:border-gray-500"
+                              )}
+                            >
+                              <span className="text-[9px] text-gray-300 font-medium truncate max-w-[130px]">
+                                "{scene.audio.voiceover_text}"
+                              </span>
+                              <span className="h-2 w-2 rounded-full shrink-0 bg-hive" title="Active Subtitle Pill" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Track 3: Voiceover Narration Track (A1) */}
+                    <div className="flex items-center min-w-max">
+                      <div className="w-28 shrink-0 font-mono text-[9px] font-bold text-emerald-400 flex items-center gap-1.5 pr-2">
+                        <Mic size={12} />
+                        <span>VOICE (A1)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {blueprint.scenes.map((scene) => {
+                          const isActive = selectedSceneId === scene.scene_id;
+                          return (
+                            <div
+                              key={scene.scene_id}
+                              onClick={() => setSelectedSceneId(scene.scene_id)}
+                              className={cn(
+                                "w-48 shrink-0 rounded-lg border h-9 px-2 flex items-center justify-between text-left cursor-pointer transition-colors",
+                                isActive ? "border-hive bg-emerald-500/15" : "border-border bg-surface-deep hover:border-gray-500"
+                              )}
+                            >
+                              <div className="flex items-center gap-1">
+                                <div className="flex items-end gap-0.5 h-4">
+                                  <span className="w-0.5 h-2 bg-emerald-400 rounded" />
+                                  <span className="w-0.5 h-3 bg-emerald-400 rounded" />
+                                  <span className="w-0.5 h-4 bg-emerald-400 rounded" />
+                                  <span className="w-0.5 h-2 bg-emerald-400 rounded" />
+                                  <span className="w-0.5 h-3 bg-emerald-400 rounded" />
+                                </div>
+                                <span className="font-mono text-[8px] text-emerald-300 ml-1">Edge Neural</span>
+                              </div>
+                              <span className="font-mono text-[8px] text-gray-400">{scene.duration_seconds.toFixed(1)}s</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Track 4: SFX Cue Track (FX) */}
+                    <div className="flex items-center min-w-max">
+                      <div className="w-28 shrink-0 font-mono text-[9px] font-bold text-pink-400 flex items-center gap-1.5 pr-2">
+                        <Zap size={12} />
+                        <span>SFX CUES (FX)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {blueprint.scenes.map((scene) => {
+                          const isActive = selectedSceneId === scene.scene_id;
+                          return (
+                            <div
+                              key={scene.scene_id}
+                              onClick={() => setSelectedSceneId(scene.scene_id)}
+                              className={cn(
+                                "w-48 shrink-0 rounded-lg border h-8 px-2 flex items-center justify-between text-left cursor-pointer transition-colors",
+                                isActive ? "border-hive bg-pink-500/15" : "border-border bg-surface-deep hover:border-gray-500"
+                              )}
+                            >
+                              <span className="font-mono text-[8px] font-bold text-pink-300 uppercase truncate">
+                                ⚡ {scene.audio.sfx_cue || "whoosh"}
+                              </span>
+                              <span className="rounded bg-pink-500/20 px-1 py-0.2 font-mono text-[7px] text-pink-300">FX</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Track 5: BGM Ambiance Track (A2) */}
+                    <div className="flex items-center min-w-max">
+                      <div className="w-28 shrink-0 font-mono text-[9px] font-bold text-violet-400 flex items-center gap-1.5 pr-2">
+                        <Music size={12} />
+                        <span>BGM BED (A2)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {blueprint.scenes.map((scene) => {
+                          const isActive = selectedSceneId === scene.scene_id;
+                          return (
+                            <div
+                              key={scene.scene_id}
+                              onClick={() => setSelectedSceneId(scene.scene_id)}
+                              className={cn(
+                                "w-48 shrink-0 rounded-lg border h-8 px-2 flex items-center justify-between text-left cursor-pointer transition-colors",
+                                isActive ? "border-hive bg-violet-500/15" : "border-border bg-surface-deep hover:border-gray-500"
+                              )}
+                            >
+                              <span className="font-mono text-[8px] font-bold text-violet-300 truncate">
+                                ♫ {scene.audio.bgm_track || "cyber_beat"}
+                              </span>
+                              <span className="font-mono text-[7px] text-violet-400">Ducked (-14dB)</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* VIEW 2: STORYBOARD CARDS WITH QUICK ACTIONS */
+                  <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
+                    {blueprint.scenes.map((scene, i) => {
+                      const isActive = selectedSceneId === scene.scene_id;
+                      const clip = activeClips.find((c) => c.scene_idx === i);
+                      return (
+                        <div
+                          key={scene.scene_id}
+                          className={cn(
+                            "group relative flex-shrink-0 w-44 rounded-xl border p-2.5 text-left transition-all",
+                            isActive
+                              ? "border-hive bg-hive/10 shadow-[0_0_20px_rgba(245,166,35,0.18)] scale-[1.02]"
+                              : "border-border bg-surface-deep hover:border-gray-500 hover:bg-surface"
+                          )}
+                        >
+                          {/* Reorder and Quick Action Overlay Bar */}
+                          <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-border/40 font-mono text-[9px]">
+                            <span className="font-bold text-gray-400">SCENE {i + 1}</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  reorderSceneMutation.mutate({ fromIdx: i, toIdx: Math.max(0, i - 1) });
+                                }}
+                                disabled={i === 0 || reorderSceneMutation.isPending}
+                                className="p-0.5 text-gray-400 hover:text-white disabled:opacity-20"
+                                title="Move Left"
+                              >
+                                <ChevronLeft size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  reorderSceneMutation.mutate({ fromIdx: i, toIdx: Math.min(blueprint.scenes.length - 1, i + 1) });
+                                }}
+                                disabled={i === blueprint.scenes.length - 1 || reorderSceneMutation.isPending}
+                                className="p-0.5 text-gray-400 hover:text-white disabled:opacity-20"
+                                title="Move Right"
+                              >
+                                <ChevronRight size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  duplicateSceneMutation.mutate(i);
+                                }}
+                                disabled={duplicateSceneMutation.isPending}
+                                className="p-0.5 text-gray-400 hover:text-hive"
+                                title="Duplicate Scene"
+                              >
+                                <Copy size={11} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteSceneMutation.mutate(i);
+                                }}
+                                disabled={blueprint.scenes.length <= 1 || deleteSceneMutation.isPending}
+                                className="p-0.5 text-gray-400 hover:text-red-400 disabled:opacity-20"
+                                title="Delete Scene"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div
+                            onClick={() => setSelectedSceneId(scene.scene_id)}
+                            className="cursor-pointer"
+                          >
+                            {/* Visual Thumbnail Frame */}
+                            <div className="relative aspect-[9/16] w-full overflow-hidden rounded-lg bg-black border border-white/10 mb-2">
+                              {clip?.thumbnail_path ? (
+                                <img
+                                  src={clip.thumbnail_path}
+                                  alt={`Scene ${i + 1}`}
+                                  className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              ) : clip?.overlay_path ? (
+                                <div className="h-full w-full bg-gradient-to-b from-[#151c2c] to-[#0c1017] p-2 flex flex-col items-center justify-center text-center">
+                                  <img src={clip.overlay_path} alt="Overlay" className="max-h-full object-contain" />
+                                </div>
+                              ) : (
+                                <div className="h-full w-full bg-gradient-to-b from-[#182030] to-[#0d121c] p-2.5 flex flex-col items-center justify-center text-center space-y-1.5">
+                                  <Film size={22} className="text-gray-600 group-hover:text-hive transition-colors" />
+                                  <span className="font-mono text-[8px] text-gray-500 uppercase tracking-wider">
+                                    {scene.visual.camera_motion.replace("_", " ")}
+                                  </span>
+                                </div>
+                              )}
+
+                              {clip?.clip_path && (
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <span className="flex items-center gap-1 rounded-full bg-hive px-2.5 py-1 text-[9px] font-mono font-bold text-[#090b10] shadow-lg">
+                                    <Play size={10} className="fill-current" />
+                                    PLAY CLIP
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Beat Badge Top */}
+                              <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between pointer-events-none">
+                                <span className={cn("rounded px-1.5 py-0.5 text-[8px] font-mono font-bold border backdrop-blur-md shadow", BEAT_COLORS[scene.emotional_beat] || "")}>
+                                  {scene.emotional_beat.toUpperCase()}
+                                </span>
+                                <span className="rounded bg-black/70 backdrop-blur-md px-1.5 py-0.5 text-[8px] font-mono text-gray-300 border border-white/10">
+                                  {scene.duration_seconds.toFixed(1)}s
+                                </span>
+                              </div>
+
+                              {/* Ready / Status Badge Bottom */}
+                              <div className="absolute bottom-1.5 left-1.5 pointer-events-none">
+                                {clip?.clip_path ? (
+                                  <span className="flex items-center gap-1 rounded bg-emerald-500/80 backdrop-blur-md px-1.5 py-0.5 text-[7px] font-mono text-white font-semibold">
+                                    <Check size={8} />
+                                    READY
+                                  </span>
+                                ) : (
+                                  <span className="rounded bg-black/60 backdrop-blur-md px-1.5 py-0.5 text-[7px] font-mono text-gray-400">
+                                    PENDING
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Voiceover preview line */}
+                            <div className="text-[10px] text-gray-300 line-clamp-2 leading-tight">
+                              {scene.audio.voiceover_text}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* 2-Column Split: Scene Clip Viewer (Left) + Interactive Scene Editor (Right) */}
@@ -1155,15 +1629,48 @@ export default function VideoStudioPage() {
                         </div>
                       </div>
 
-                      {/* Field 1: Voiceover Narration */}
+                      {/* Field 1: Voiceover Narration with 1-Click AI Script Booster */}
                       <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                           <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider">
                             VOICEOVER NARRATION TEXT
                           </label>
-                          <span className="font-mono text-[9px] text-gray-500">
-                            {editedVoiceover.split(/\s+/).filter(Boolean).length} words
-                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-[9px] text-gray-500">
+                              {editedVoiceover.split(/\s+/).filter(Boolean).length} words
+                            </span>
+                            {/* AI Booster Control */}
+                            <div className="flex items-center gap-1 rounded bg-surface border border-border p-0.5">
+                              <select
+                                value={scriptStyle}
+                                onChange={(e) => setScriptStyle(e.target.value as any)}
+                                className="bg-transparent px-1.5 py-0.5 font-mono text-[9px] text-gray-300 outline-none cursor-pointer"
+                              >
+                                <option value="punchy">⚡ Punchy & High-Retention</option>
+                                <option value="curiosity_gap">🔍 Curiosity Gap</option>
+                                <option value="controversial">🔥 Controversial Hook</option>
+                                <option value="conversational">🎙 Conversational</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => enhanceScriptMutation.mutate()}
+                                disabled={enhanceScriptMutation.isPending || !editedVoiceover.trim()}
+                                className="flex items-center gap-1 rounded bg-hive px-2 py-0.5 font-mono text-[9px] font-bold text-[#090b10] hover:bg-hive-400 disabled:opacity-50 transition-colors shadow"
+                              >
+                                {enhanceScriptMutation.isPending ? (
+                                  <>
+                                    <Loader2 size={10} className="animate-spin" />
+                                    BOOSTING…
+                                  </>
+                                ) : (
+                                  <>
+                                    <Wand2 size={10} />
+                                    BOOST WITH AI
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
                         </div>
                         <textarea
                           rows={3}
@@ -1337,6 +1844,156 @@ export default function VideoStudioPage() {
                                 </button>
                               ))}
                             </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Studio Audio, Voice Speed & Soundboard Controls */}
+                      <div className="rounded-xl border border-border bg-surface-deep p-3.5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-mono text-[9px] text-gray-300 font-semibold uppercase tracking-wider">
+                            <Volume2 size={12} className="text-hive" />
+                            <span>STUDIO AUDIO, VOICE SPEED & SFX</span>
+                          </div>
+                          <span className="font-mono text-[8px] text-hive bg-hive/10 border border-hive/20 rounded px-1.5 py-0.5">
+                            ZERO BLEED DUCKING
+                          </span>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          {/* Voice Speed */}
+                          <div className="space-y-1.5">
+                            <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                              VOICE SPEED (PACING)
+                            </label>
+                            <div className="grid grid-cols-4 gap-1 rounded-lg border border-border bg-surface p-1 text-center font-mono text-[9px]">
+                              {[
+                                { speed: 0.85, label: "0.85x" },
+                                { speed: 1.0, label: "1.0x" },
+                                { speed: 1.15, label: "1.15x" },
+                                { speed: 1.25, label: "1.25x" },
+                              ].map((item) => (
+                                <button
+                                  key={item.speed}
+                                  type="button"
+                                  onClick={() => setEditedVoiceSpeed(item.speed)}
+                                  className={cn(
+                                    "rounded py-1 font-bold transition-colors",
+                                    editedVoiceSpeed === item.speed
+                                      ? "bg-hive text-[#090b10] shadow"
+                                      : "text-gray-400 hover:text-gray-200"
+                                  )}
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* BGM Ambiance Track */}
+                          <div className="space-y-1.5">
+                            <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                              BGM AMBIANCE THEME
+                            </label>
+                            <select
+                              value={editedBgmTrack}
+                              onChange={(e) => setEditedBgmTrack(e.target.value)}
+                              className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
+                            >
+                              <option value="cyber_beat">Cyber Lo-Fi Beat (Rhythmic)</option>
+                              <option value="deep_ambient">Deep Ambient (Warm Drone)</option>
+                              <option value="upbeat_viral">Upbeat Viral (High Tempo)</option>
+                              <option value="cinematic_suspense">Cinematic Suspense (Tension)</option>
+                            </select>
+                          </div>
+
+                          {/* SFX Cue Soundboard */}
+                          <div className="space-y-1.5">
+                            <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                              STUDIO SFX CUE
+                            </label>
+                            <select
+                              value={editedSfxCue}
+                              onChange={(e) => setEditedSfxCue(e.target.value)}
+                              className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
+                            >
+                              {sfxCatalog.length > 0 ? (
+                                sfxCatalog.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} ({s.category})
+                                  </option>
+                                ))
+                              ) : (
+                                <>
+                                  <option value="whoosh">Whoosh (Fast Transition)</option>
+                                  <option value="impact">Deep Impact (Beat Drop)</option>
+                                  <option value="pop">Pop (UI Attention)</option>
+                                  <option value="chime">Chime (Insight / Clue)</option>
+                                  <option value="riser">Riser (Suspense Build)</option>
+                                  <option value="glitch">Glitch (Digital Distortion)</option>
+                                  <option value="cash_register">Cash Register (Revenue / Win)</option>
+                                  <option value="camera_click">Camera Click (Snapshot)</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visual Filters & Aspect Ratio Controls */}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl border border-border bg-surface-deep p-3 space-y-2">
+                          <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                            COLOR GRADING & VISUAL FX
+                          </label>
+                          <div className="grid grid-cols-4 gap-1 rounded-lg border border-border bg-surface p-1 text-center font-mono text-[9px]">
+                            {[
+                              { id: "none" as const, label: "CLEAN" },
+                              { id: "vibrant" as const, label: "VIBRANT" },
+                              { id: "cinematic" as const, label: "MOODY" },
+                              { id: "cyberpunk" as const, label: "CYBER" },
+                            ].map((f) => (
+                              <button
+                                key={f.id}
+                                type="button"
+                                onClick={() => setEditedVisualFilter(f.id)}
+                                className={cn(
+                                  "rounded py-1 font-bold transition-colors",
+                                  editedVisualFilter === f.id
+                                    ? "bg-hive text-[#090b10] shadow"
+                                    : "text-gray-400 hover:text-gray-200"
+                                )}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-surface-deep p-3 space-y-2">
+                          <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
+                            CANVAS ASPECT RATIO
+                          </label>
+                          <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-surface p-1 text-center font-mono text-[9px]">
+                            {[
+                              { id: "9:16" as const, label: "9:16 VERT" },
+                              { id: "1:1" as const, label: "1:1 SQUARE" },
+                              { id: "16:9" as const, label: "16:9 LAND" },
+                            ].map((ar) => (
+                              <button
+                                key={ar.id}
+                                type="button"
+                                onClick={() => setEditedAspectRatio(ar.id)}
+                                className={cn(
+                                  "rounded py-1 font-bold transition-colors",
+                                  editedAspectRatio === ar.id
+                                    ? "bg-hive text-[#090b10] shadow"
+                                    : "text-gray-400 hover:text-gray-200"
+                                )}
+                              >
+                                {ar.label}
+                              </button>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -1907,6 +2564,41 @@ export default function VideoStudioPage() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                {/* Upload Custom File Button */}
+                <input
+                  type="file"
+                  ref={assetFileInputRef}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      uploadAssetMutation.mutate(file);
+                    }
+                  }}
+                  accept="image/*,video/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => assetFileInputRef.current?.click()}
+                  disabled={uploadAssetMutation.isPending}
+                  className="flex flex-col items-center justify-center rounded-xl border border-dashed border-hive/50 bg-hive/5 p-4 text-center transition-all h-48 hover:bg-hive/10 hover:border-hive cursor-pointer"
+                >
+                  {uploadAssetMutation.isPending ? (
+                    <>
+                      <Loader2 size={24} className="text-hive animate-spin mb-2" />
+                      <span className="font-mono text-xs font-bold text-hive">Uploading Asset…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={24} className="text-hive mb-2" />
+                      <span className="font-mono text-xs font-bold text-gray-100">Upload Custom Media</span>
+                      <span className="text-[10px] text-gray-400 mt-1">
+                        PNG, JPG, MP4 from your device
+                      </span>
+                    </>
+                  )}
+                </button>
+
                 {/* Option 0: Dynamic Stock Matching */}
                 <button
                   type="button"
@@ -2059,6 +2751,123 @@ export default function VideoStudioPage() {
                 className="rounded-lg bg-hive px-4 py-1.5 font-mono text-xs font-bold text-[#090b10] hover:bg-hive-400"
               >
                 DONE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Scene Modal */}
+      {isAddSceneModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-xl rounded-2xl border border-hive/40 bg-surface p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <Plus size={18} className="text-hive" />
+                <h3 className="font-display text-base font-semibold text-gray-100">
+                  Add New Scene to Timeline
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddSceneModalOpen(false)}
+                className="rounded-lg border border-border p-1.5 text-gray-400 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider block">
+                  VOICEOVER NARRATION
+                </label>
+                <textarea
+                  rows={3}
+                  value={newSceneVoiceover}
+                  onChange={(e) => setNewSceneVoiceover(e.target.value)}
+                  placeholder="Enter the spoken script for this new scene..."
+                  className="w-full rounded-lg border border-border bg-surface-deep p-3 text-xs text-gray-100 outline-none focus:border-hive/50 font-sans leading-relaxed"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider block">
+                    B-ROLL KEYWORDS
+                  </label>
+                  <input
+                    type="text"
+                    value={newSceneKeywords}
+                    onChange={(e) => setNewSceneKeywords(e.target.value)}
+                    placeholder="e.g. artificial intelligence, technology"
+                    className="w-full rounded-lg border border-border bg-surface-deep px-3 py-2 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider block">
+                    EMOTIONAL BEAT
+                  </label>
+                  <select
+                    value={newSceneBeat}
+                    onChange={(e) => setNewSceneBeat(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface-deep px-3 py-2 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
+                  >
+                    <option value="hook">Hook (Shock / Grab)</option>
+                    <option value="tension">Tension (Stakes)</option>
+                    <option value="escalation">Escalation (Evidence)</option>
+                    <option value="revelation">Revelation (Aha! Moment)</option>
+                    <option value="payoff">Payoff (Actionable insight)</option>
+                    <option value="twist">Twist (Surprise)</option>
+                    <option value="cta">CTA (Next action)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] text-gray-400 uppercase tracking-wider block">
+                  CAMERA MOTION
+                </label>
+                <select
+                  value={newSceneMotion}
+                  onChange={(e) => setNewSceneMotion(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface-deep px-3 py-2 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
+                >
+                  <option value="slow_zoom_in">Slow Zoom In (Hook & Punch)</option>
+                  <option value="pan_left">Cinematic Pan Left</option>
+                  <option value="slow_zoom_out">Slow Zoom Out (Reveal)</option>
+                  <option value="pan_right">Cinematic Pan Right</option>
+                  <option value="ken_burns">Ken Burns Diagonal Drift</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setIsAddSceneModalOpen(false)}
+                className="rounded-lg border border-border px-4 py-2 font-mono text-xs text-gray-400 hover:text-white"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={() => addSceneMutation.mutate()}
+                disabled={addSceneMutation.isPending || !newSceneVoiceover.trim()}
+                className="flex items-center gap-1.5 rounded-lg bg-hive px-5 py-2 font-mono text-xs font-bold text-[#090b10] hover:bg-hive-400 disabled:opacity-50 shadow"
+              >
+                {addSceneMutation.isPending ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    RENDERING NEW SCENE…
+                  </>
+                ) : (
+                  <>
+                    <Plus size={13} />
+                    ADD SCENE & RENDER
+                  </>
+                )}
               </button>
             </div>
           </div>

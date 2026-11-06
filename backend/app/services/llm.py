@@ -1,3 +1,4 @@
+import os
 import asyncio
 import json
 import re
@@ -16,14 +17,24 @@ class LLMService:
     """Shared Ollama model service with concurrency control and structured output validation."""
 
     def __init__(self, settings: Settings):
-        self.url = settings.ollama_url
+        url = settings.ollama_url
+        if "host.docker.internal" in url and not os.path.exists("/.dockerenv"):
+            url = url.replace("host.docker.internal", "127.0.0.1")
+        self.url = url
         self.model = settings.ollama_model
         self.timeout = settings.ollama_timeout
-        self._semaphore = asyncio.Semaphore(settings.ollama_max_concurrent)
+        self._max_concurrent = settings.ollama_max_concurrent
+        self._semaphore: asyncio.Semaphore | None = None
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(self._max_concurrent)
+        return self._semaphore
 
     async def generate(self, prompt: str, temperature: float = 0.4, system: str | None = None) -> str:
         """Call Ollama for unstructured text generation under concurrency control."""
-        async with self._semaphore:
+        async with self.semaphore:
             logger.info("LLM text request started (model=%s, prompt_len=%d)", self.model, len(prompt))
             timeout = httpx.Timeout(self.timeout, connect=10.0)
             payload = {
@@ -67,7 +78,7 @@ class LLMService:
             "Do NOT include markdown formatting, backticks, or preamble. Return raw JSON only."
         )
 
-        async with self._semaphore:
+        async with self.semaphore:
             logger.info("LLM structured request started (model=%s, schema=%s)", self.model, schema.__name__)
             timeout = httpx.Timeout(self.timeout, connect=10.0)
             payload = {
@@ -116,7 +127,7 @@ class LLMService:
     async def health_check(self) -> dict:
         """Check if Ollama is reachable and the model is available."""
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.5)) as client:
                 resp = await client.get(f"{self.url}/api/tags")
                 resp.raise_for_status()
                 models = [m["name"] for m in resp.json().get("models", [])]

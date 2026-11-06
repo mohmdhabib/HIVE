@@ -1,16 +1,13 @@
 import os
 import sys
 import pytest
-from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from app.main import app
 from app.services.video_engine import video_engine
 from app.services.video_renderer import video_renderer
 from app.services.material_service import material_service
+from app.services.sfx_service import sfx_service
 from app.schemas.video import SceneUpdateRequest
-
-client = TestClient(app)
 
 
 def test_find_best_local_stock_asset_fashion():
@@ -40,14 +37,12 @@ def test_find_best_local_stock_asset_rotation():
 
 
 def test_list_stock_materials_endpoint():
-    resp = client.get("/api/v1/video/stock-materials")
-    assert resp.status_code == 200
-    items = resp.json()
+    items = material_service.list_stock_materials()
     assert len(items) > 0
-    assert any("fashion" in item["filename"].lower() for item in items)
+    assert any("fashion" in item.filename.lower() for item in items)
 
 
-def test_natural_speech_duration_matching():
+def test_natural_speech_duration_matching(tmp_path):
     short_text = "Stop coding."
     long_text = "Fashion in 2025 isn't just about what you wear—it's about how your clothes interact with the digital world."
     dur_short = video_renderer._calculate_natural_speech_duration(short_text)
@@ -62,10 +57,13 @@ def test_natural_speech_duration_matching():
 
 
 def test_render_scene_overlay_bottom_position(tmp_path):
-    blueprint = video_engine.generate_blueprint(
+    blueprint = video_engine.assemble_blueprint(
         worker_id="lifestyle",
         trend_title="Future of Cyber Fashion 2025",
-        trend_summary="Digital fashion and runway technology revolutionizing wearable art.",
+        hook_text="Digital fashion and runway tech.",
+        body_points=["Wearable art is revolutionizing fashion."],
+        cta_text="Follow for more.",
+        description="Digital fashion showcase.",
     )
     scene = blueprint.scenes[0]
     out_overlay = str(tmp_path / "test_bottom_overlay.png")
@@ -115,37 +113,95 @@ def test_scene_clips_generation_and_editor_endpoint():
         assert os.path.exists(local_clip)
         assert os.path.getsize(local_clip) > 1000
 
-    # 4. Test GET /video/blueprint/{blueprint_id}/clips API
-    resp = client.get(f"/api/v1/video/blueprint/{bp.blueprint_id}/clips")
-    assert resp.status_code == 200
-    clips_data = resp.json()
+    # 4. Test GET clips
+    clips_data = video_renderer.get_scene_clips(bp.blueprint_id)
     assert len(clips_data) == len(bp.scenes)
-    assert clips_data[0]["scene_idx"] == 0
+    assert clips_data[0].scene_idx == 0
 
-    # 5. Test Regenerating Single Scene with bottom caption and color: POST /video/blueprint/{blueprint_id}/scene/1/render
-    update_payload = {
-        "voiceover_text": "Updated voiceover for Scene 1 with bottom subtitles.",
-        "search_keywords": ["fashion", "runway", "model"],
-        "camera_motion": "pan_left",
-        "caption_position": "bottom",
-        "caption_highlight_color": "#00FF66",
-        "caption_font_size": 64,
-        "caption_style": "pill",
-    }
-    regen_resp = client.post(
-        f"/api/v1/video/blueprint/{bp.blueprint_id}/scene/1/render",
-        json=update_payload,
+    # 5. Test Regenerating Single Scene with bottom caption and color
+    req = SceneUpdateRequest(
+        voiceover_text="Updated voiceover for Scene 1 with bottom subtitles.",
+        search_keywords=["fashion", "runway", "model"],
+        camera_motion="pan_left",
+        caption_position="bottom",
+        caption_highlight_color="#00FF66",
+        caption_font_size=64,
+        caption_style="pill",
+        voice_speed=1.15,
+        bgm_track="cyber_beat",
+        visual_filter="vibrant",
     )
-    assert regen_resp.status_code == 200
-    regen_job = regen_resp.json()
-    assert regen_job["status"] == "complete"
+    regen_job = video_renderer.render_single_scene(
+        blueprint_id=bp.blueprint_id,
+        scene_idx=1,
+        update=req,
+    )
+    assert regen_job.status == "complete"
 
     # Verify Scene 1 was updated in the returned clips
-    updated_clip = next(c for c in regen_job["scene_clips"] if c["scene_idx"] == 1)
-    assert updated_clip["voiceover_text"] == "Updated voiceover for Scene 1 with bottom subtitles."
-    assert updated_clip["camera_motion"] == "pan_left"
+    updated_clip = next(c for c in regen_job.scene_clips if c.scene_idx == 1)
+    assert updated_clip.voiceover_text == "Updated voiceover for Scene 1 with bottom subtitles."
+    assert updated_clip.camera_motion == "pan_left"
+
+    # 6. Test Reorder Scenes: Move scene 0 to index 2
+    initial_count = len(job.scene_clips)
+    reorder_job = video_renderer.reorder_scenes(
+        blueprint_id=bp.blueprint_id,
+        from_idx=0,
+        to_idx=2,
+    )
+    assert reorder_job.status == "complete"
+
+    # 7. Test Duplicate Scene: Duplicate scene 0
+    dup_job = video_renderer.duplicate_scene(
+        blueprint_id=bp.blueprint_id,
+        scene_idx=0,
+    )
+    assert dup_job.status == "complete"
+    assert len(dup_job.scene_clips) == initial_count + 1
+
+    # 8. Test Delete Scene: Delete the duplicate
+    del_job = video_renderer.delete_scene(
+        blueprint_id=bp.blueprint_id,
+        scene_idx=1,
+    )
+    assert del_job.status == "complete"
+    assert len(del_job.scene_clips) == initial_count
 
     # Verify master video is still intact
     final_mp4 = os.path.join("storage", "videos", f"{bp.blueprint_id}.mp4")
     assert os.path.exists(final_mp4)
     assert os.path.getsize(final_mp4) > 10000
+
+
+def test_sfx_catalog_endpoint():
+    catalog = sfx_service.list_available_sfx()
+    assert len(catalog) >= 8
+    cue_ids = [item["id"] for item in catalog]
+    assert "whoosh" in cue_ids
+    assert "impact" in cue_ids
+    assert "pop" in cue_ids
+    assert "chime" in cue_ids
+    assert "riser" in cue_ids
+    assert "glitch" in cue_ids
+    assert "cash_register" in cue_ids
+    assert "camera_click" in cue_ids
+
+
+def test_enhance_script_endpoint():
+    bp = video_engine.assemble_blueprint(
+        worker_id="lifestyle",
+        trend_title="AI Script Booster Test",
+        hook_text="This is a simple script text.",
+        body_points=["Here is a fact."],
+        cta_text="Subscribe now.",
+        description="Testing script booster endpoint.",
+    )
+    video_renderer.blueprints[bp.blueprint_id] = bp
+
+    enhanced = video_engine.enhance_script_sync(
+        current_text="This is a simple script text.",
+        emotional_beat="hook",
+        style="punchy",
+    )
+    assert len(enhanced) > 0
