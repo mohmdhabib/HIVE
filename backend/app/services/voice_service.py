@@ -1,6 +1,7 @@
 import os
 import socket
 import asyncio
+import subprocess
 import wave
 import struct
 import math
@@ -8,6 +9,18 @@ from typing import Optional
 from app.core.logging import get_logger
 
 logger = get_logger("voice_service")
+
+
+def get_ffmpeg_binary() -> str:
+    try:
+        import imageio_ffmpeg
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if os.path.exists(exe):
+            return exe
+    except Exception:
+        pass
+    return "ffmpeg"
+
 
 VOICE_MAP = {
     "tech": "en-US-ChristopherNeural",
@@ -47,24 +60,43 @@ class VoiceService:
         return self._is_online
 
     async def _generate_edge_tts(self, text: str, voice_name: str, output_path: str) -> bool:
-        """Attempts neural voice synthesis using Microsoft Edge TTS."""
+        """Attempts neural voice synthesis using Microsoft Edge TTS, transcoding into clean 44.1kHz WAV."""
         try:
             import edge_tts
+            ffmpeg_bin = get_ffmpeg_binary()
+            tmp_mp3 = output_path + ".tmp.mp3"
             communicate = edge_tts.Communicate(text, voice_name)
-            await asyncio.wait_for(communicate.save(output_path), timeout=5.0)
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
-                logger.info("Successfully generated Edge TTS voiceover with voice '%s'", voice_name)
-                return True
+            await asyncio.wait_for(communicate.save(tmp_mp3), timeout=8.0)
+            if os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 1024:
+                cmd = [
+                    ffmpeg_bin, "-y",
+                    "-i", tmp_mp3,
+                    "-ar", "44100",
+                    "-ac", "1",
+                    "-c:a", "pcm_s16le",
+                    output_path,
+                ]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                if os.path.exists(tmp_mp3):
+                    try:
+                        os.remove(tmp_mp3)
+                    except Exception:
+                        pass
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
+                    logger.info("Successfully generated Edge TTS voiceover with voice '%s'", voice_name)
+                    return True
         except Exception as e:
             logger.debug("Edge TTS generation failed or timed out: %s", e)
         return False
 
     def _generate_synthetic_cadence(self, text: str, duration_sec: float, output_path: str):
-        """Synthesizes multi-harmonic cadence waveforms matching word counts."""
+        """Synthesizes multi-harmonic cadence waveforms matching natural word pacing."""
         sample_rate = 44100
         words = text.split()
         num_words = max(1, len(words))
-        total_samples = int(sample_rate * duration_sec)
+        # Ensure duration gives each word at least 0.38 seconds for clear natural rhythm
+        effective_duration = max(duration_sec, num_words * 0.38)
+        total_samples = int(sample_rate * effective_duration)
 
         samples_per_word = total_samples // num_words
         frames = bytearray()

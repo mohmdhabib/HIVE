@@ -47,7 +47,14 @@ def test_list_stock_materials_endpoint():
     assert any("fashion" in item["filename"].lower() for item in items)
 
 
-def test_audio_duration_calculation(tmp_path):
+def test_natural_speech_duration_matching():
+    short_text = "Stop coding."
+    long_text = "Fashion in 2025 isn't just about what you wear—it's about how your clothes interact with the digital world."
+    dur_short = video_renderer._calculate_natural_speech_duration(short_text)
+    dur_long = video_renderer._calculate_natural_speech_duration(long_text)
+    assert dur_short >= 3.2
+    assert dur_long >= 7.0  # 17 words + punctuation needs at least 7.0s to speak comfortably
+    assert dur_long > dur_short
     wav_path = str(tmp_path / "ambient.wav")
     video_renderer._generate_ambient_bgm(duration_sec=3.5, output_path=wav_path)
     dur = video_renderer._get_audio_duration(wav_path)

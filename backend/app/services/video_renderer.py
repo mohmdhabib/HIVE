@@ -149,34 +149,44 @@ class VideoRenderService:
             f.setframerate(sample_rate)
             f.writeframes(frames)
 
+    def _calculate_natural_speech_duration(self, text: str) -> float:
+        """Estimates natural human speaking tempo (~140 wpm, ~0.42s per word + 0.35s per clause break)."""
+        if not text:
+            return 3.2
+        words = text.split()
+        num_words = max(1, len(words))
+        pause_count = text.count(",") + text.count(".") + text.count("!") + text.count("?") + text.count("—") + text.count(":") + text.count(";")
+        raw_dur = (num_words * 0.42) + (pause_count * 0.35)
+        return max(3.2, round(raw_dur, 2))
+
     def _get_audio_duration(self, file_path: str) -> float:
-        """Measures exact duration in seconds of an audio file using wave header or ffprobe/ffmpeg fallback."""
+        """Measures exact duration in seconds of any audio file using wave header or FFmpeg inspection."""
         if not file_path or not os.path.exists(file_path):
-            return 3.0
+            return 3.5
+
+        # 1. Try pure wave header (instant 0ms)
         try:
             with wave.open(file_path, "r") as wf:
                 frames = wf.getnframes()
                 rate = wf.getframerate()
-                if rate > 0:
+                if rate > 0 and frames > 0:
                     dur = frames / float(rate)
-                    return round(dur, 2)
+                    if dur > 0.1:
+                        return round(dur, 2)
         except Exception:
             pass
 
+        # 2. Inspect with FFmpeg (works on MP3, WAV, AAC, MP4, etc.)
         try:
             ffmpeg_bin = get_ffmpeg_binary()
-            ffprobe_bin = ffmpeg_bin.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
-            if os.path.exists(ffprobe_bin):
-                cmd = [
-                    ffprobe_bin, "-v", "error",
-                    "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    file_path,
-                ]
-                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
-                val = float(res.stdout.strip())
-                if val > 0:
-                    return round(val, 2)
+            cmd = [ffmpeg_bin, "-i", file_path]
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            match = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr)
+            if match:
+                h, m, s = match.groups()
+                total = int(h) * 3600 + int(m) * 60 + float(s)
+                if total > 0.1:
+                    return round(total, 2)
         except Exception:
             pass
 
@@ -448,17 +458,18 @@ class VideoRenderService:
                 scene_mp4 = os.path.join(bp_clips_dir, f"scene_{idx}.mp4")
                 scene_thumb = os.path.join(bp_clips_dir, f"scene_{idx}_thumb.jpg")
 
-                # Step A: Synthesize Real AI Spoken Voiceover FIRST
+                # Step A: Synthesize Real AI Spoken Voiceover FIRST with natural speech timing
+                natural_duration = self._calculate_natural_speech_duration(scene.audio.voiceover_text)
                 voice_service.generate_voiceover(
                     text=scene.audio.voiceover_text,
                     worker_id=blueprint.worker_id,
-                    duration_sec=scene.duration_seconds,
+                    duration_sec=natural_duration,
                     output_path=scene_voice,
                 )
 
                 # Step B: Measure EXACT voiceover duration and lock scene duration to prevent audio overlap
                 voice_duration = self._get_audio_duration(scene_voice)
-                duration = max(3.0, round(voice_duration + 0.35, 2))
+                duration = max(3.2, round(voice_duration + 0.50, 2))
                 scene.duration_seconds = duration
 
                 # Step C: Obtain real stock video, niche background loop, or kinetic motion footage matching exact duration
@@ -485,7 +496,7 @@ class VideoRenderService:
 
                 # Step E: Ambient BGM + Audio Mixing with ZERO bleed and microsecond-level synchronization
                 self._generate_ambient_bgm(duration_sec=duration, output_path=scene_bgm)
-                fade_start = max(0.0, round(duration - 0.35, 2))
+                fade_start = max(0.0, round(duration - 0.40, 2))
                 sfx_path = sfx_service.get_sfx_path(scene.audio.sfx_cue)
                 if sfx_path and os.path.exists(sfx_path):
                     mix_cmd = [
@@ -495,7 +506,7 @@ class VideoRenderService:
                         "-i", sfx_path,
                         "-filter_complex",
                         f"[0:a]apad=pad_dur=2.0,atrim=0:{duration}[v];"
-                        f"[1:a]volume=0.18,atrim=0:{duration},afade=t=out:st={fade_start}:d=0.35[b];"
+                        f"[1:a]volume=0.18,atrim=0:{duration},afade=t=out:st={fade_start}:d=0.40[b];"
                         f"[2:a]volume=0.30,apad=pad_dur=2.0,atrim=0:{duration}[s];"
                         f"[v][b][s]amix=inputs=3:duration=first:dropout_transition=0,atrim=0:{duration}[a]",
                         "-map", "[a]",
@@ -509,7 +520,7 @@ class VideoRenderService:
                         "-i", scene_bgm,
                         "-filter_complex",
                         f"[0:a]apad=pad_dur=2.0,atrim=0:{duration}[v];"
-                        f"[1:a]volume=0.18,atrim=0:{duration},afade=t=out:st={fade_start}:d=0.35[b];"
+                        f"[1:a]volume=0.18,atrim=0:{duration},afade=t=out:st={fade_start}:d=0.40[b];"
                         f"[v][b]amix=inputs=2:duration=first:dropout_transition=0,atrim=0:{duration}[a]",
                         "-map", "[a]",
                         "-c:a", "pcm_s16le",
@@ -586,7 +597,12 @@ class VideoRenderService:
                 "-f", "concat",
                 "-safe", "0",
                 "-i", concat_list_file,
-                "-c", "copy",
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-avoid_negative_ts", "make_zero",
                 final_mp4,
             ]
             subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
@@ -680,17 +696,18 @@ class VideoRenderService:
         scene_mp4 = os.path.join(bp_clips_dir, f"scene_{scene_idx}.mp4")
         scene_thumb = os.path.join(bp_clips_dir, f"scene_{scene_idx}_thumb.jpg")
 
-        # Step 1: Synthesize voiceover FIRST
+        # Step 1: Synthesize voiceover FIRST with natural speech timing
+        natural_duration = self._calculate_natural_speech_duration(scene.audio.voiceover_text)
         voice_service.generate_voiceover(
             text=scene.audio.voiceover_text,
             worker_id=blueprint.worker_id,
-            duration_sec=scene.duration_seconds,
+            duration_sec=natural_duration,
             output_path=scene_voice,
         )
 
-        # Step 2: Measure EXACT voiceover duration and lock scene duration
+        # Step 2: Measure EXACT voiceover duration and lock scene duration to prevent audio cut-off
         voice_duration = self._get_audio_duration(scene_voice)
-        duration = max(3.0, round(voice_duration + 0.35, 2))
+        duration = max(3.2, round(voice_duration + 0.50, 2))
         scene.duration_seconds = duration
 
         # Step 3: Visual background: if custom asset provided, use it directly
@@ -741,7 +758,7 @@ class VideoRenderService:
 
         # Step 5: Ambient BGM & zero-bleed audio mixing
         self._generate_ambient_bgm(duration_sec=duration, output_path=scene_bgm)
-        fade_start = max(0.0, round(duration - 0.35, 2))
+        fade_start = max(0.0, round(duration - 0.40, 2))
         sfx_path = sfx_service.get_sfx_path(update.sfx_cue or scene.audio.sfx_cue)
         if sfx_path and os.path.exists(sfx_path):
             mix_cmd = [
@@ -852,7 +869,12 @@ class VideoRenderService:
                 "-f", "concat",
                 "-safe", "0",
                 "-i", concat_list,
-                "-c", "copy",
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                "-avoid_negative_ts", "make_zero",
                 final_mp4,
             ]
             subprocess.run(concat_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
