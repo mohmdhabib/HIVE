@@ -77,6 +77,78 @@ const ZONE_LABELS: Record<string, string> = {
   close: "CLOSE — conversion window",
 };
 
+function playTactileSfx(sfxId: string) {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+    if (sfxId === "whoosh") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(110, now + 0.28);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.28);
+      osc.start();
+      osc.stop(now + 0.28);
+    } else if (sfxId === "impact") {
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.exponentialRampToValueAtTime(30, now + 0.4);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+      osc.start();
+      osc.stop(now + 0.4);
+    } else if (sfxId === "riser") {
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.exponentialRampToValueAtTime(950, now + 0.5);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+      osc.start();
+      osc.stop(now + 0.5);
+    } else if (sfxId === "cash_register") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523, now);
+      osc.frequency.setValueAtTime(659, now + 0.08);
+      osc.frequency.setValueAtTime(784, now + 0.16);
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+      osc.start();
+      osc.stop(now + 0.35);
+    } else if (sfxId === "chime") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.setValueAtTime(1320, now + 0.1);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+      osc.start();
+      osc.stop(now + 0.4);
+    } else {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(500, now);
+      osc.frequency.exponentialRampToValueAtTime(180, now + 0.12);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+      osc.start();
+      osc.stop(now + 0.15);
+    }
+  } catch {
+    // audio context blocked or muted
+  }
+}
+
+const TRENDING_INSPIRATIONS = [
+  { label: "⚡ Autonomous Agent Swarms", worker: "tech", title: "Why single-prompt AI wrappers are dead and LangGraph state swarms are winning.", summary: "Autonomous agents coordinating through structured state graphs." },
+  { label: "🔥 Cyberpunk Runway 2025", worker: "lifestyle", title: "Digital fashion & generative wearables replacing physical runway fashion.", summary: "Runway technology revolutionizing wearable art." },
+  { label: "⚛️ Quantum Supremacy Leap", worker: "curiosity", title: "How neutral atom quantum processors just passed classical supercomputers.", summary: "Quantum computing breakthrough and cryptographic impact." },
+  { label: "💎 Quiet Luxury Psychology", worker: "business", title: "The covert psychology behind silent luxury branding in 2025.", summary: "High-net-worth consumer psychology." },
+];
+
 export default function VideoStudioPage() {
   const queryClient = useQueryClient();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -410,77 +482,135 @@ export default function VideoStudioPage() {
   const virality = blueprint?.virality_score;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 relative">
+      {/* Luxury Ambient Spotlight */}
+      <div className="pointer-events-none absolute -top-10 left-1/4 right-1/4 h-36 bg-hive/10 blur-[100px] rounded-full" />
+
+      {/* Header with Live Engine Telemetry */}
+      <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border/60 pb-5">
         <div>
-          <div className="font-mono text-[9px] tracking-[1.8px] text-gray-400">
-            VIDEO INTELLIGENCE ENGINE
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+            <span className="font-mono text-xs font-bold uppercase tracking-widest text-hive">
+              HIVE NEURAL STUDIO • v2.4
+            </span>
+            <span className="text-xs text-gray-500">|</span>
+            <span className="text-xs font-mono text-emerald-400">Zero-Bleed 4K Engine Ready</span>
           </div>
-          <h1 className="mt-1 font-display text-2xl font-semibold">Video Production Studio</h1>
-          <p className="text-xs text-gray-400">
-            Scene-graph storytelling, retention-curve pacing, A/B hook variants, brand identity overlay, and pre-publish virality scoring.
+          <h1 className="mt-1.5 font-display text-3xl font-extrabold tracking-tight text-gray-100">
+            Autonomous Video Intelligence Studio
+          </h1>
+          <p className="text-xs text-gray-400 max-w-2xl mt-0.5">
+            Non-linear multi-track sequencer, zero-bleed speech cadence sync, dynamic HUD subtitles, A/B retention hooks, and broadcast-grade H.264 rendering.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded border border-border bg-surface px-3 py-1.5 font-mono text-[10px]">
-          <Clapperboard size={13} className="text-hive" />
-          <span>BEYOND MONEYPRINTER</span>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-surface-deep/80 px-3.5 py-2 font-mono text-xs shadow-inner">
+            <Clapperboard size={14} className="text-hive" />
+            <span className="text-gray-300 font-semibold">STUDIO GRADE</span>
+            <span className="text-hive font-bold">1080×1920</span>
+          </div>
         </div>
       </div>
 
-      {/* Worker Selector */}
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <label className="block font-mono text-[9px] tracking-[1.1px] text-gray-400 mb-2">
-          PRODUCTION BRAND
-        </label>
+      {/* Production Brand Persona Selector */}
+      <div className="rounded-2xl border border-white/[0.08] bg-surface/80 backdrop-blur-xl p-4 shadow-xl">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="font-mono text-xs tracking-wider text-gray-400 font-semibold uppercase">
+            TARGET PRODUCTION BRAND & NICHE
+          </span>
+          <span className="text-xs text-hive font-mono">
+            Active Persona: <strong className="text-gray-100">{activeWorker?.name || "Signal Tech"}</strong>
+          </span>
+        </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {workers.map((w) => (
-            <button
-              key={w.id}
-              onClick={() => { setSelectedWorker(w.id); setBlueprint(null); }}
-              className={cn(
-                "flex items-center gap-2 rounded-lg border p-2.5 text-left text-xs transition-colors",
-                selectedWorkerId === w.id
-                  ? "border-hive/50 bg-hive/10 text-gray-100 font-medium"
-                  : "border-border bg-surface-deep text-gray-400 hover:text-gray-200"
-              )}
-            >
-              <Bot size={15} className={selectedWorkerId === w.id ? "text-hive" : "text-gray-500"} />
-              <div className="truncate">
-                <div className="truncate font-medium">{w.name}</div>
-                <div className="text-[9px] text-gray-500 capitalize truncate">{w.niche}</div>
-              </div>
-            </button>
-          ))}
+          {workers.map((w) => {
+            const isSelected = selectedWorkerId === w.id;
+            return (
+              <button
+                key={w.id}
+                onClick={() => { setSelectedWorker(w.id); setBlueprint(null); }}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-xl border p-3 text-left transition-all duration-200 group relative overflow-hidden",
+                  isSelected
+                    ? "border-hive bg-gradient-to-b from-hive/20 to-hive/5 text-gray-100 shadow-[0_0_20px_rgba(245,166,35,0.15)] ring-1 ring-hive/30"
+                    : "border-white/[0.06] bg-surface-deep/90 text-gray-400 hover:text-gray-200 hover:border-white/20 hover:bg-surface"
+                )}
+              >
+                {isSelected && (
+                  <div className="absolute top-0 right-0 w-8 h-8 bg-hive/20 rounded-bl-xl flex items-center justify-center">
+                    <Check size={11} className="text-hive" />
+                  </div>
+                )}
+                <Bot size={18} className={isSelected ? "text-hive" : "text-gray-500 group-hover:text-gray-400"} />
+                <div className="truncate">
+                  <div className="truncate font-semibold text-xs text-gray-100">{w.name}</div>
+                  <div className="text-[11px] text-gray-400 capitalize truncate font-mono">{w.niche}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Input Panel: Topic Entry */}
-      <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
-        <div className="flex items-center gap-2 border-b border-border pb-3">
-          <Sparkles size={16} className="text-hive" />
-          <h2 className="font-display text-base font-semibold">Generate Video Blueprint</h2>
+      {/* Input Panel: Topic Entry with 1-Click Viral Inspirations */}
+      <div className="rounded-2xl border border-white/[0.08] bg-surface/80 backdrop-blur-xl p-5 space-y-4 shadow-xl relative">
+        <div className="flex items-center justify-between border-b border-border/60 pb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-hive animate-pulse" />
+            <h2 className="font-display text-base font-bold text-gray-100">Direct AI Video Generation</h2>
+          </div>
+          <span className="text-xs text-gray-400 font-mono">Llama 3.1 • Structured Engine</span>
+        </div>
+
+        {/* 1-Click Viral Topic Chips */}
+        <div>
+          <div className="flex items-center gap-1.5 mb-2 font-mono text-[11px] text-gray-400">
+            <Flame size={12} className="text-amber-400" />
+            <span>VIRAL INSPIRATION PRESETS (CLICK TO AUTO-FILL):</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {TRENDING_INSPIRATIONS.map((chip, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => {
+                  setTrendTitle(chip.title);
+                  setTrendSummary(chip.summary);
+                  setSelectedWorker(chip.worker);
+                  setBlueprint(null);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/[0.08] bg-surface-deep/80 hover:bg-hive/15 hover:border-hive/40 text-xs font-medium text-gray-300 hover:text-white transition-all shadow-sm"
+              >
+                <span>{chip.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2">
           <div>
-            <label className="block font-mono text-[9px] text-gray-400 mb-1.5">TREND / TOPIC TITLE</label>
+            <label className="block font-mono text-xs text-gray-400 mb-1.5">TREND / TOPIC TITLE</label>
             <input
               type="text"
               value={trendTitle}
               onChange={(e) => setTrendTitle(e.target.value)}
               placeholder="e.g. Open-source LLMs reach 90% benchmark parity with cloud APIs"
-              className="w-full rounded-lg border border-border bg-surface-deep px-3.5 py-2.5 text-xs text-gray-200 outline-none focus:border-hive/50"
+              className="w-full rounded-xl border border-white/[0.08] bg-surface-deep px-3.5 py-2.5 text-xs text-gray-100 outline-none focus:border-hive/60 focus:ring-1 focus:ring-hive/30 transition-all placeholder:text-gray-500 font-medium"
             />
           </div>
           <div>
-            <label className="block font-mono text-[9px] text-gray-400 mb-1.5">CONTEXT / SUMMARY (OPTIONAL)</label>
+            <label className="block font-mono text-xs text-gray-400 mb-1.5">CONTEXT / RETENTION HOOK (OPTIONAL)</label>
             <input
               type="text"
               value={trendSummary}
               onChange={(e) => setTrendSummary(e.target.value)}
-              placeholder="Additional context about why this is trending right now..."
-              className="w-full rounded-lg border border-border bg-surface-deep px-3.5 py-2.5 text-xs text-gray-200 outline-none focus:border-hive/50"
+              placeholder="Why this topic demands viewer attention in the first 3 seconds..."
+              className="w-full rounded-xl border border-white/[0.08] bg-surface-deep px-3.5 py-2.5 text-xs text-gray-100 outline-none focus:border-hive/60 focus:ring-1 focus:ring-hive/30 transition-all placeholder:text-gray-500 font-medium"
             />
           </div>
         </div>
@@ -488,10 +618,10 @@ export default function VideoStudioPage() {
         <button
           onClick={() => blueprintMutation.mutate()}
           disabled={blueprintMutation.isPending || !trendTitle.trim()}
-          className="flex items-center gap-1.5 rounded-lg bg-hive px-5 py-2.5 font-mono text-xs font-semibold text-[#090b10] hover:bg-hive-400 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl bg-hive px-6 py-3 font-mono text-xs font-bold text-[#090b10] hover:bg-hive-400 transition-all shadow-[0_0_25px_rgba(245,166,35,0.25)] hover:shadow-[0_0_35px_rgba(245,166,35,0.4)] disabled:opacity-50"
         >
-          <Film size={14} />
-          {blueprintMutation.isPending ? "BUILDING BLUEPRINT…" : "GENERATE VIDEO BLUEPRINT"}
+          <Film size={15} />
+          {blueprintMutation.isPending ? "GENERATING BLUEPRINT & SCENE GRAPH…" : "GENERATE AI VIDEO BLUEPRINT"}
         </button>
       </div>
 
@@ -1907,35 +2037,54 @@ export default function VideoStudioPage() {
                             </select>
                           </div>
 
-                          {/* SFX Cue Soundboard */}
-                          <div className="space-y-1.5">
-                            <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider block">
-                              STUDIO SFX CUE
-                            </label>
-                            <select
-                              value={editedSfxCue}
-                              onChange={(e) => setEditedSfxCue(e.target.value)}
-                              className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-gray-200 outline-none focus:border-hive/50 font-mono"
-                            >
-                              {sfxCatalog.length > 0 ? (
-                                sfxCatalog.map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name} ({s.category})
-                                  </option>
-                                ))
-                              ) : (
-                                <>
-                                  <option value="whoosh">Whoosh (Fast Transition)</option>
-                                  <option value="impact">Deep Impact (Beat Drop)</option>
-                                  <option value="pop">Pop (UI Attention)</option>
-                                  <option value="chime">Chime (Insight / Clue)</option>
-                                  <option value="riser">Riser (Suspense Build)</option>
-                                  <option value="glitch">Glitch (Digital Distortion)</option>
-                                  <option value="cash_register">Cash Register (Revenue / Win)</option>
-                                  <option value="camera_click">Camera Click (Snapshot)</option>
-                                </>
-                              )}
-                            </select>
+                          {/* SFX Cue Soundboard with Click-to-Audition */}
+                          <div className="space-y-1.5 sm:col-span-3 pt-1">
+                            <div className="flex items-center justify-between">
+                              <label className="font-mono text-xs text-gray-300 uppercase tracking-wider block font-semibold">
+                                STUDIO SFX SOUNDBOARD (CLICK TO AUDITION & ASSIGN)
+                              </label>
+                              <span className="font-mono text-[11px] text-amber-400">
+                                Assigned: <strong className="text-gray-100">{editedSfxCue}</strong>
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {[
+                                { id: "whoosh", name: "Whoosh", icon: "💨", desc: "Fast Cut" },
+                                { id: "impact", name: "Impact", icon: "💥", desc: "Beat Drop" },
+                                { id: "pop", name: "Snap Pop", icon: "🫧", desc: "HUD Focus" },
+                                { id: "chime", name: "Chime", icon: "🔔", desc: "Key Clue" },
+                                { id: "riser", name: "Tension Riser", icon: "📈", desc: "Build-Up" },
+                                { id: "glitch", name: "Cyber Glitch", icon: "⚡", desc: "Twist" },
+                                { id: "cash_register", name: "Cash Payoff", icon: "💰", desc: "Win CTA" },
+                                { id: "camera_click", name: "Camera Shutter", icon: "📸", desc: "Snapshot" },
+                              ].map((sfx) => {
+                                const isSelected = editedSfxCue === sfx.id;
+                                return (
+                                  <button
+                                    key={sfx.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setEditedSfxCue(sfx.id);
+                                      playTactileSfx(sfx.id);
+                                    }}
+                                    className={cn(
+                                      "flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition-all group",
+                                      isSelected
+                                        ? "border-amber-400 bg-amber-500/20 text-white shadow-[0_0_15px_rgba(245,158,11,0.25)] ring-1 ring-amber-400/40"
+                                        : "border-white/[0.06] bg-surface hover:bg-surface-deep hover:border-white/20 text-gray-300"
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-2 truncate">
+                                      <span className="text-sm">{sfx.icon}</span>
+                                      <span className="font-semibold">{sfx.name}</span>
+                                    </div>
+                                    <span className="text-[10px] text-gray-500 group-hover:text-amber-400 font-mono">
+                                      {isSelected ? "ACTIVE" : "AUDITION"}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       </div>
