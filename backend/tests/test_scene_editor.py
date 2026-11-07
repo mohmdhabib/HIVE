@@ -205,3 +205,146 @@ def test_enhance_script_endpoint():
         style="punchy",
     )
     assert len(enhanced) > 0
+
+
+def test_stock_library_search():
+    results = material_service.search_stock_library(query="cyberpunk neon", orientation="portrait", limit=6)
+    assert len(results) > 0
+    first = results[0]
+    assert first["thumbnail_url"] is not None
+    assert first["regular_url"] is not None
+    assert first["source"] in ("unsplash", "stock_materials")
+
+
+def test_scene_visual_reroll_and_custom_asset():
+    bp = video_engine.assemble_blueprint(
+        worker_id="tech",
+        trend_title="Re-roll Test Blueprint",
+        hook_text="AI breakthrough test for visual reroll.",
+        body_points=["Scene testing re-roll visual cycling."],
+        cta_text="Subscribe.",
+        description="Verifying visual reroll cycling and custom asset updates.",
+    )
+    video_renderer.blueprints[bp.blueprint_id] = bp
+    init_job = video_renderer.render_blueprint(bp)
+    assert init_job.status == "complete"
+
+    clip_before = init_job.scene_clips[0]
+
+    # Re-roll scene 0 visual
+    reroll_job = video_renderer.render_single_scene(
+        blueprint_id=bp.blueprint_id,
+        scene_idx=0,
+        update=SceneUpdateRequest(reroll_visual=True),
+    )
+    assert reroll_job.status == "complete"
+    clip_after = reroll_job.scene_clips[0]
+    assert clip_after.clip_path.endswith(".mp4")
+    assert os.path.exists(os.path.join("storage", "clips", bp.blueprint_id, "scene_0.mp4"))
+
+    # Custom asset update
+    stock_items = material_service.list_stock_materials()
+    if stock_items:
+        custom_file = stock_items[0].file_path
+        update_job = video_renderer.render_single_scene(
+            blueprint_id=bp.blueprint_id,
+            scene_idx=0,
+            update=SceneUpdateRequest(custom_asset_path=custom_file),
+        )
+        assert update_job.status == "complete"
+
+
+@pytest.mark.anyio
+async def test_regenerate_blueprint_script_api():
+    import json
+    from app.api.routes import regenerate_blueprint_script_endpoint
+    from unittest.mock import MagicMock, AsyncMock
+
+    bp = video_engine.assemble_blueprint(
+        worker_id="tech",
+        trend_title="Next-Gen Robotics Fleet Deployed",
+        hook_text="Old hook text.",
+        body_points=["Old point 1", "Old point 2"],
+        cta_text="Old cta.",
+        description="Old description.",
+    )
+    video_renderer.blueprints[bp.blueprint_id] = bp
+
+    mock_llm = MagicMock()
+    mock_llm.model = "llama3.1"
+    mock_llm.timeout = 100.0
+    mock_llm.generate = AsyncMock(return_value=json.dumps({
+        "hook": "Robotics just changed manufacturing forever.",
+        "cta": "Follow for more robotics engineering updates.",
+        "description": "How autonomous factory fleets are setting new output records.",
+        "scenes": [
+            {"scene_idx": 0, "beat": "hook", "voiceover": "Robotics just changed manufacturing forever.", "visual_description": "Robots working", "search_keywords": ["robot arm", "factory"], "camera_motion": "slow_zoom_in", "sfx_cue": "impact"},
+            {"scene_idx": 1, "beat": "tension", "voiceover": "Legacy factories can no longer match this operational velocity.", "visual_description": "Factory line", "search_keywords": ["conveyor", "manufacturing"], "camera_motion": "pan_left", "sfx_cue": "suspense_sting"},
+            {"scene_idx": 2, "beat": "revelation", "voiceover": "New neural control systems allow instant adaptation to any part geometry.", "visual_description": "Precision laser", "search_keywords": ["laser", "engineering"], "camera_motion": "slow_zoom_in", "sfx_cue": "reveal_chime"},
+            {"scene_idx": 3, "beat": "escalation", "voiceover": "Error rates have plunged by over ninety-five percent across pilot runs.", "visual_description": "Quality screen", "search_keywords": ["inspection", "screen"], "camera_motion": "pan_right", "sfx_cue": "whoosh"},
+            {"scene_idx": 4, "beat": "deep_dive", "voiceover": "Engineers no longer write custom kinematics; they train reward functions.", "visual_description": "Neural net", "search_keywords": ["ai code", "datacenter"], "camera_motion": "slow_zoom_out", "sfx_cue": None},
+            {"scene_idx": 5, "beat": "twist", "voiceover": "The real surprise is the total capital expenditure payback window.", "visual_description": "Financial graph", "search_keywords": ["roi", "finance"], "camera_motion": "slow_zoom_in", "sfx_cue": "impact"},
+            {"scene_idx": 6, "beat": "payoff", "voiceover": "Payback is achieved in under seven months instead of three years.", "visual_description": "Modern plant", "search_keywords": ["clean room", "future"], "camera_motion": "ken_burns", "sfx_cue": "reveal_chime"},
+            {"scene_idx": 7, "beat": "cta", "voiceover": "Follow for daily breakthroughs in robotics and hardware engineering.", "visual_description": "Brand outro", "search_keywords": ["robotics logo", "dark studio"], "camera_motion": "slow_zoom_in", "sfx_cue": "whoosh"}
+        ]
+    }))
+
+    updated = await regenerate_blueprint_script_endpoint(
+        blueprint_id=bp.blueprint_id,
+        llm=mock_llm,
+    )
+    assert updated.blueprint_id == bp.blueprint_id
+    assert updated.hook_variants[0].hook_text if updated.hook_variants else True
+    assert updated.scenes[0].audio.voiceover_text == "Robotics just changed manufacturing forever."
+    assert updated.scenes[6].audio.voiceover_text == "Payback is achieved in under seven months instead of three years."
+
+
+@pytest.mark.anyio
+async def test_stream_blueprint_generation_endpoint():
+    import json
+    from app.api.routes import stream_generate_blueprint_endpoint, VideoBlueprintRequest
+    from unittest.mock import MagicMock
+
+    mock_llm = MagicMock()
+    mock_llm.model = "llama3.1"
+    mock_llm.timeout = 60.0
+
+    async def mock_stream(*args, **kwargs):
+        chunks = ['{"hook": "Stream Hook", ', '"cta": "Stream CTA", ', '"description": "Stream Desc", ', '"scenes": [',
+                  '{"voiceover": "S1", "visual_description": "V1", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"},',
+                  '{"voiceover": "S2", "visual_description": "V2", "search_keywords": ["k1", "k2"], "camera_motion": "pan_left"},',
+                  '{"voiceover": "S3", "visual_description": "V3", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"},',
+                  '{"voiceover": "S4", "visual_description": "V4", "search_keywords": ["k1", "k2"], "camera_motion": "pan_right"},',
+                  '{"voiceover": "S5", "visual_description": "V5", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_out"},',
+                  '{"voiceover": "S6", "visual_description": "V6", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"},',
+                  '{"voiceover": "S7", "visual_description": "V7", "search_keywords": ["k1", "k2"], "camera_motion": "ken_burns"},',
+                  '{"voiceover": "S8", "visual_description": "V8", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"}]}'
+        ]
+        for c in chunks:
+            yield c
+
+    mock_llm.generate_stream = mock_stream
+
+    req = VideoBlueprintRequest(
+        worker_id="tech",
+        trend_title="Streaming Execution Architecture",
+        trend_summary="Real-time agentic trace streaming verification.",
+    )
+
+    response = await stream_generate_blueprint_endpoint(req=req, llm=mock_llm)
+    assert response.media_type == "text/event-stream"
+
+    # Read SSE events from streaming body
+    events_received = []
+    async for chunk in response.body_iterator:
+        text = chunk if isinstance(chunk, str) else chunk.decode("utf-8")
+        events_received.append(text)
+
+    full_stream_text = "".join(events_received)
+    assert "data: " in full_stream_text
+    assert '"type": "step"' in full_stream_text
+    assert '"type": "complete"' in full_stream_text
+    assert '"blueprint"' in full_stream_text
+
+
+

@@ -14,5 +14,8 @@ class LLMError(HiveError):
 class LLMTimeoutError(LLMError):
     pass
 
+class LLMGenerationError(LLMError):
+    pass
+
 class KillSwitchActiveError(HiveError):
     pass

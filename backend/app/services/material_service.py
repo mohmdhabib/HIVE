@@ -4,7 +4,7 @@ import math
 import subprocess
 import json
 import urllib.request
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Any
 from PIL import Image, ImageDraw
 
 from app.core.logging import get_logger
@@ -51,6 +51,7 @@ class MaterialService:
         keywords: List[str],
         access_key: Optional[str] = None,
         orientation: str = "portrait",
+        result_idx: int = 0,
     ) -> Optional[str]:
         """Queries the Unsplash API for real, ultra-high-definition vertical photography matching keywords with intelligent query relaxation."""
         key = access_key or os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
@@ -89,7 +90,7 @@ class MaterialService:
         for candidate in candidates[:4]:
             try:
                 query = urllib.parse.quote(candidate)
-                url = f"https://api.unsplash.com/search/photos?query={query}&orientation={orientation}&per_page=4"
+                url = f"https://api.unsplash.com/search/photos?query={query}&orientation={orientation}&per_page=6"
                 req = urllib.request.Request(
                     url,
                     headers={"Authorization": f"Client-ID {key}", "User-Agent": "HIVE-VideoEngine/2.0"}
@@ -98,14 +99,14 @@ class MaterialService:
                     data = json.loads(resp.read().decode("utf-8"))
                     results = data.get("results", [])
                     if results:
-                        first_photo = results[0]
-                        urls = first_photo.get("urls", {})
+                        selected_photo = results[result_idx % len(results)]
+                        urls = selected_photo.get("urls", {})
                         img_url = urls.get("regular") or urls.get("full") or urls.get("small")
                         if img_url:
-                            photo_id = first_photo.get("id", "photo")
+                            photo_id = selected_photo.get("id", "photo")
                             dest_path = os.path.join(self.downloads_dir, f"unsplash_{photo_id}.jpg")
                             if not os.path.exists(dest_path):
-                                logger.info("Downloading real Unsplash photo for '%s': %s", candidate, photo_id)
+                                logger.info("Downloading real Unsplash photo for '%s' (offset=%d): %s", candidate, result_idx, photo_id)
                                 dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-VideoEngine/2.0"})
                                 with urllib.request.urlopen(dl_req, timeout=5.0) as dl_resp:
                                     with open(dest_path, "wb") as f:
@@ -115,6 +116,76 @@ class MaterialService:
                 logger.debug("Unsplash candidate '%s' skipped: %s", candidate, e)
 
         return None
+
+    def download_photo_by_url(self, img_url: str, photo_id: str) -> str:
+        """Downloads an image from URL and stores it in the materials cache."""
+        safe_id = "".join(c for c in photo_id if c.isalnum() or c in "-_") or "custom"
+        dest_path = os.path.join(self.downloads_dir, f"unsplash_{safe_id}.jpg")
+        if not os.path.exists(dest_path) or os.path.getsize(dest_path) < 1000:
+            dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-VideoEngine/2.0"})
+            with urllib.request.urlopen(dl_req, timeout=8.0) as resp:
+                with open(dest_path, "wb") as f:
+                    f.write(resp.read())
+        return dest_path
+
+    def search_stock_library(
+        self,
+        query: str,
+        orientation: str = "portrait",
+        limit: int = 8,
+    ) -> List[Dict[str, Any]]:
+        """Searches live stock photography via Unsplash and local vault."""
+        clean_query = query.replace('"', '').replace("'", '').replace("#", "").strip()
+        items: List[Dict[str, Any]] = []
+
+        # 1. Unsplash live search
+        key = os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
+        if not key:
+            try:
+                from app.config import get_settings
+                key = get_settings().unsplash_access_key
+            except Exception:
+                pass
+
+        if key and clean_query:
+            try:
+                safe_q = urllib.parse.quote(clean_query)
+                url = f"https://api.unsplash.com/search/photos?query={safe_q}&orientation={orientation}&per_page={limit}"
+                req = urllib.request.Request(
+                    url,
+                    headers={"Authorization": f"Client-ID {key}", "User-Agent": "HIVE-VideoEngine/2.0"}
+                )
+                with urllib.request.urlopen(req, timeout=4.5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    for r in data.get("results", []):
+                        urls = r.get("urls", {})
+                        items.append({
+                            "id": r.get("id"),
+                            "title": r.get("alt_description") or r.get("description") or clean_query.title(),
+                            "thumbnail_url": urls.get("small") or urls.get("thumb", ""),
+                            "regular_url": urls.get("regular") or urls.get("full", ""),
+                            "author": r.get("user", {}).get("name") or "Unsplash Contributor",
+                            "source": "unsplash",
+                        })
+            except Exception as e:
+                logger.debug("Unsplash search error: %s", e)
+
+        # 2. Add matching local stock assets
+        if os.path.exists(self.stock_images_dir):
+            for fname in os.listdir(self.stock_images_dir):
+                if any(ext in fname.lower() for ext in [".jpg", ".png", ".jpeg"]):
+                    if any(w.lower() in fname.lower() for w in clean_query.split()):
+                        full_p = os.path.join(self.stock_images_dir, fname)
+                        items.append({
+                            "id": f"local-{fname}",
+                            "title": fname.replace("_", " ").split(".")[0].title(),
+                            "thumbnail_url": f"/api/materials/file?path={urllib.parse.quote(full_p)}",
+                            "regular_url": full_p,
+                            "author": "HIVE Stock Vault",
+                            "source": "local_bank",
+                        })
+
+        return items
 
     def fetch_pexels_stock_video(
         self,
@@ -280,6 +351,7 @@ class MaterialService:
         brand_color: str = "#00d4ff",
         scene_idx: int = 0,
         camera_motion: str = "",
+        result_offset: int = 0,
     ) -> Tuple[str, str, str]:
         """Retrieves footage and returns (output_path, source_type, source_description) for full observability."""
         ffmpeg_bin = get_ffmpeg_binary()
@@ -289,35 +361,36 @@ class MaterialService:
         effective_motion = camera_motion if camera_motion else motion_sequence[scene_idx % len(motion_sequence)]
 
         # Tier 0: Check Pre-Harvested Media Vault (Instant Local Hit)
-        try:
-            from app.services.media_harvester import media_harvester
-            vault_match = media_harvester.find_matching_footage(niche=worker_id, keywords=keywords)
-            if vault_match and os.path.exists(vault_match):
-                # If image in vault, animate it with Ken Burns
-                if vault_match.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-                    if self.convert_image_to_motion_video(vault_match, duration_sec, output_path, motion_type=effective_motion):
-                        logger.info("Using vault image with %s motion: %s", effective_motion, vault_match)
-                        return output_path, "Media Vault", os.path.basename(vault_match)
-                else:
-                    cmd = [
-                        ffmpeg_bin, "-y",
-                        "-stream_loop", "-1",
-                        "-i", vault_match,
-                        "-t", str(duration_sec),
-                        "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",
-                        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-                        "-an",
-                        output_path,
-                    ]
-                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                    if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
-                        logger.info("Using pre-harvested vault footage: %s", vault_match)
-                        return output_path, "Media Vault", os.path.basename(vault_match)
-        except Exception as e:
-            logger.debug("Vault lookup skipped: %s", e)
+        if result_offset == 0:
+            try:
+                from app.services.media_harvester import media_harvester
+                vault_match = media_harvester.find_matching_footage(niche=worker_id, keywords=keywords)
+                if vault_match and os.path.exists(vault_match):
+                    # If image in vault, animate it with Ken Burns
+                    if vault_match.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                        if self.convert_image_to_motion_video(vault_match, duration_sec, output_path, motion_type=effective_motion):
+                            logger.info("Using vault image with %s motion: %s", effective_motion, vault_match)
+                            return output_path, "Media Vault", os.path.basename(vault_match)
+                    else:
+                        cmd = [
+                            ffmpeg_bin, "-y",
+                            "-stream_loop", "-1",
+                            "-i", vault_match,
+                            "-t", str(duration_sec),
+                            "-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",
+                            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                            "-an",
+                            output_path,
+                        ]
+                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                        if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+                            logger.info("Using pre-harvested vault footage: %s", vault_match)
+                            return output_path, "Media Vault", os.path.basename(vault_match)
+            except Exception as e:
+                logger.debug("Vault lookup skipped: %s", e)
 
         # Tier 1: Real Unsplash Stock Photography API (Priority 1)
-        unsplash_img = self.fetch_unsplash_stock_photo(keywords=keywords)
+        unsplash_img = self.fetch_unsplash_stock_photo(keywords=keywords, result_idx=result_offset)
         if unsplash_img and os.path.exists(unsplash_img):
             if self.convert_image_to_motion_video(unsplash_img, duration_sec, output_path, motion_type=effective_motion):
                 logger.info("Using real Unsplash HD stock photo with %s motion: %s", effective_motion, unsplash_img)
@@ -355,7 +428,7 @@ class MaterialService:
         chosen_asset, asset_type = self.find_best_local_stock_asset(
             keywords=keywords,
             worker_id=worker_id,
-            scene_idx=scene_idx,
+            scene_idx=scene_idx + result_offset,
         )
         asset_path = os.path.join(self.stock_images_dir, chosen_asset)
 

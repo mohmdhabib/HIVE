@@ -1,0 +1,500 @@
+{
+  "blueprint_id": "vbp-716c2abb3b72",
+  "worker_id": "tech",
+  "source_trend_id": null,
+  "title": "Streaming Execution Architecture",
+  "description": "Stream Desc",
+  "scenes": [
+    {
+      "scene_id": "s01-hook",
+      "emotional_beat": "hook",
+      "retention_zone": "critical",
+      "duration_seconds": 3.8,
+      "visual": {
+        "description": "V1",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "k1",
+          "k2"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "high_contrast"
+      },
+      "audio": {
+        "voiceover_text": "S1",
+        "voiceover_emphasis": [
+          "S1"
+        ],
+        "voice_tone": "urgent",
+        "sfx_cue": "impact",
+        "music_energy": "peak",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "glitch",
+      "pacing_note": "Scene 1 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s02-tension",
+      "emotional_beat": "tension",
+      "retention_zone": "build",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "V2",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "k1",
+          "k2"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_left",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "S2",
+        "voiceover_emphasis": [
+          "S2"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": null,
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 2 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s03-revelation",
+      "emotional_beat": "revelation",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "V3",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "k1",
+          "k2"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "S3",
+        "voiceover_emphasis": [
+          "S3"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "whoosh",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 3 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s04-escalation",
+      "emotional_beat": "escalation",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "V4",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "k1",
+          "k2"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_right",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "S4",
+        "voiceover_emphasis": [
+          "S4"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": null,
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 4 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s05-twist",
+      "emotional_beat": "twist",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "V5",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "k1",
+          "k2"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_out",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "S5",
+        "voiceover_emphasis": [
+          "S5"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": null,
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 5 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s06-payoff",
+      "emotional_beat": "payoff",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "V6",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "k1",
+          "k2"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "S6",
+        "voiceover_emphasis": [
+          "S6"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": null,
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 6 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s07-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "V7",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "k1",
+          "k2"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "ken_burns",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "S7",
+        "voiceover_emphasis": [
+          "S7"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": null,
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 7 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s08-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "V8",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "k1",
+          "k2"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "S8",
+        "voiceover_emphasis": [
+          "S8"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": null,
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 8 cadence locked. Maintain speech rhythm without pause."
+    }
+  ],
+  "total_duration_seconds": 33.2,
+  "brand": {
+    "worker_id": "tech",
+    "brand_name": "Signal Tech",
+    "logo_path": null,
+    "watermark_position": "bottom_right",
+    "watermark_opacity": 0.3,
+    "colors": {
+      "primary": "#00d4ff",
+      "secondary": "#0a0e1a",
+      "accent": "#7c3aed",
+      "text_primary": "#ffffff",
+      "text_secondary": "#a0a0a0",
+      "caption_highlight": "#00d4ff",
+      "caption_background": "rgba(0,0,0,0.7)"
+    },
+    "typography": {
+      "heading_font": "JetBrains Mono Bold",
+      "body_font": "Inter-Regular",
+      "caption_font": "JetBrains Mono Bold",
+      "caption_size": 44
+    },
+    "intro_template": null,
+    "outro_template": null,
+    "default_voice": "en-US-GuyNeural",
+    "voice_speed": 1.08
+  },
+  "captions": {
+    "style": "word_highlight",
+    "position": "bottom_center",
+    "max_words_per_line": 5,
+    "highlight_color": "#00d4ff",
+    "base_color": "#ffffff",
+    "shadow_color": "#000000",
+    "font_size": 44,
+    "stroke_width": 3,
+    "animation": "pop"
+  },
+  "hook_variants": [
+    {
+      "variant_id": "hook-contrarian",
+      "variant_label": "Contrarian Warning",
+      "hook_text": "Everyone is wrong about Streaming Execution Architecture. Here's the proof.",
+      "hook_visual_description": "Red warning text flash with camera shake effect",
+      "predicted_retention_3s": 0.72,
+      "hook_archetype": "contrarian"
+    },
+    {
+      "variant_id": "hook-curiosity",
+      "variant_label": "Curiosity Gap",
+      "hook_text": "I spent 48 hours testing Streaming Execution Architecture and what I found changes everything.",
+      "hook_visual_description": "Personal POV shot transitioning to evidence montage",
+      "predicted_retention_3s": 0.68,
+      "hook_archetype": "curiosity_gap"
+    },
+    {
+      "variant_id": "hook-stat-shock",
+      "variant_label": "Statistical Shock",
+      "hook_text": "97% of people don't know this about Streaming Execution Architecture. Number 3 will surprise you.",
+      "hook_visual_description": "Large animated percentage counter with dramatic reveal",
+      "predicted_retention_3s": 0.65,
+      "hook_archetype": "stat_paradox"
+    }
+  ],
+  "selected_hook_variant": "hook-contrarian",
+  "thumbnail": {
+    "headline_text": "STREAMING EXECUTION ARCHITECTURE",
+    "subtext": "by Signal Tech",
+    "emotion": "curiosity",
+    "layout": "split_diagonal",
+    "background_image_keywords": [
+      "k1",
+      "k2"
+    ],
+    "use_brand_colors": true,
+    "face_overlay": false,
+    "arrow_or_circle": true
+  },
+  "export": {
+    "primary": {
+      "aspect_ratio": "9:16",
+      "resolution": "1080x1920",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "square": {
+      "aspect_ratio": "1:1",
+      "resolution": "1080x1080",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "landscape": null
+  },
+  "virality_score": {
+    "overall_score": 88,
+    "hook_strength": 90,
+    "pacing_quality": 100,
+    "visual_variety": 74,
+    "audio_energy": 89,
+    "cta_clarity": 85,
+    "shareability": 90,
+    "risk_flags": [
+      "Hook exceeds 3-second critical retention window"
+    ],
+    "recommendation": "publish"
+  },
+  "telemetry": {
+    "engine_mode": "ollama_llama3.1",
+    "model_name": "llama3.1",
+    "research_latency_seconds": 0.0,
+    "screenplay_archetype": "insider_secret",
+    "llm_connected": true,
+    "llm_error_reason": null,
+    "target_audience": "Curious professionals, developers, and builders",
+    "angle_discovered": "insider_secret",
+    "event_trace": [
+      {
+        "timestamp": "19:33:54.070",
+        "phase": "INIT",
+        "message": "Initializing Creative Director Agent | Target Brand: 'Signal Tech' (Niche: AI and technology) | Tone: Clear, useful, curious, evidence-led, technical yet accessible"
+      },
+      {
+        "timestamp": "19:33:54.072",
+        "phase": "RESEARCH",
+        "message": "Trend & Entity Extraction | Identified primary entity: 'Streaming' | Core topic: 'Streaming Execution Architecture'"
+      },
+      {
+        "timestamp": "19:33:54.072",
+        "phase": "STRATEGY",
+        "message": "Viral Screenplay Strategy | Screenplay Archetype: 'Insider Secret' | Audience: Curious professionals, developers, and builders"
+      },
+      {
+        "timestamp": "19:33:54.072",
+        "phase": "LLM_DISPATCH",
+        "message": "Local Neural LLM Runtime (Llama 3.1 8B) | Dispatching prompt to Ollama model 'llama3.1' on local GPU (timeout: 90s)..."
+      },
+      {
+        "timestamp": "19:33:54.072",
+        "phase": "LLM_COMPLETE",
+        "message": "Local Neural LLM Runtime (Llama 3.1 8B) | Ollama synthesized 8-scene bespoke script in 0.0s"
+      },
+      {
+        "timestamp": "19:33:54.072",
+        "phase": "VISUALS",
+        "message": "4K Stock Asset Keyword Resolution | Synthesized photogenic stock search queries across 8 scenes (Unsplash & Vault)"
+      },
+      {
+        "timestamp": "19:33:54.072",
+        "phase": "AUDIO",
+        "message": "Voiceover Cadence & SFX Calibration | Calibrated voice rhythms, SFX cues ('impact', 'whoosh'), and natural speech pacing (33.2s total)"
+      },
+      {
+        "timestamp": "19:33:54.072",
+        "phase": "COMPLETE",
+        "message": "Master Screenplay Finalized | Crafted 8 bespoke scenes | Total agent latency: 0.0s | Mode: ollama_llama3.1"
+      }
+    ],
+    "trace_steps": [
+      {
+        "step_id": "init",
+        "title": "Initializing Creative Director Agent",
+        "phase": "init",
+        "status": "completed",
+        "detail": "Target Brand: 'Signal Tech' (Niche: AI and technology) | Tone: Clear, useful, curious, evidence-led, technical yet accessible",
+        "snippet": null,
+        "elapsed_ms": 0,
+        "timestamp": "19:33:54.070"
+      },
+      {
+        "step_id": "research",
+        "title": "Trend & Entity Extraction",
+        "phase": "research",
+        "status": "completed",
+        "detail": "Identified primary entity: 'Streaming' | Core topic: 'Streaming Execution Architecture'",
+        "snippet": null,
+        "elapsed_ms": 1,
+        "timestamp": "19:33:54.072"
+      },
+      {
+        "step_id": "strategy",
+        "title": "Viral Screenplay Strategy",
+        "phase": "strategy",
+        "status": "completed",
+        "detail": "Screenplay Archetype: 'Insider Secret' | Audience: Curious professionals, developers, and builders",
+        "snippet": null,
+        "elapsed_ms": 1,
+        "timestamp": "19:33:54.072"
+      },
+      {
+        "step_id": "llm_dispatch",
+        "title": "Local Neural LLM Runtime (Llama 3.1 8B)",
+        "phase": "llm_complete",
+        "status": "completed",
+        "detail": "Ollama synthesized 8-scene bespoke script in 0.0s",
+        "snippet": "Hook: \"Stream Hook\"",
+        "elapsed_ms": 2,
+        "timestamp": "19:33:54.072"
+      },
+      {
+        "step_id": "visuals",
+        "title": "4K Stock Asset Keyword Resolution",
+        "phase": "visuals",
+        "status": "completed",
+        "detail": "Synthesized photogenic stock search queries across 8 scenes (Unsplash & Vault)",
+        "snippet": null,
+        "elapsed_ms": 2,
+        "timestamp": "19:33:54.072"
+      },
+      {
+        "step_id": "audio",
+        "title": "Voiceover Cadence & SFX Calibration",
+        "phase": "audio",
+        "status": "completed",
+        "detail": "Calibrated voice rhythms, SFX cues ('impact', 'whoosh'), and natural speech pacing (33.2s total)",
+        "snippet": null,
+        "elapsed_ms": 2,
+        "timestamp": "19:33:54.072"
+      },
+      {
+        "step_id": "complete",
+        "title": "Master Screenplay Finalized",
+        "phase": "complete",
+        "status": "completed",
+        "detail": "Crafted 8 bespoke scenes | Total agent latency: 0.0s | Mode: ollama_llama3.1",
+        "snippet": null,
+        "elapsed_ms": 2,
+        "timestamp": "19:33:54.072"
+      }
+    ]
+  },
+  "hashtags": [
+    "#shorts",
+    "#viral",
+    "#aiandtechnology",
+    "#streaming",
+    "#execution",
+    "#architecture"
+  ],
+  "target_platforms": [
+    "youtube_shorts",
+    "instagram_reels",
+    "tiktok"
+  ],
+  "monetization_links": [],
+  "created_at": "2026-11-07T19:33:54.072952+00:00"
+}

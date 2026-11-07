@@ -1,6 +1,9 @@
 import os
+import json
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from app.schemas.task import TaskRequest, TaskReport, TaskPlan
 from app.schemas.worker import WorkerConfig
@@ -27,6 +30,8 @@ from app.schemas.video import (
     SceneReorderRequest,
     EnhanceScriptRequest,
     StockMaterialItem,
+    StockSearchItem,
+    TraceStep,
 )
 from app.schemas.briefing import MasterExecutiveBriefing, WorkerPerformanceDigest
 from app.workers.registry import list_workers, get_worker
@@ -47,9 +52,10 @@ from app.services.video_renderer import video_renderer
 from app.services.material_service import material_service
 from app.services.sfx_service import sfx_service
 from app.services.master_briefing import master_briefing_service
+from app.services.script_director import script_director_agent
 from app.dependencies import get_llm_service
 from app.config import Settings, get_settings
-from app.core.exceptions import WorkerNotFoundError, WorkerDisabledError, KillSwitchActiveError, LLMError
+from app.core.exceptions import WorkerNotFoundError, WorkerDisabledError, KillSwitchActiveError, LLMError, LLMTimeoutError, LLMGenerationError
 from app.core.logging import get_logger
 
 logger = get_logger("api")
@@ -236,18 +242,186 @@ async def generate_video_blueprint(
     llm: LLMService = Depends(get_llm_service),
 ):
     try:
-        return await video_engine.generate_blueprint_from_trend(
+        bp = await video_engine.generate_blueprint_from_trend(
             worker_id=req.worker_id,
             trend_title=req.trend_title,
             trend_summary=req.trend_summary,
             source_trend_id=req.source_trend_id,
             llm=llm,
         )
+        video_renderer.blueprints[bp.blueprint_id] = bp
+        bp_dir = os.path.join(video_renderer.clips_dir, bp.blueprint_id)
+        os.makedirs(bp_dir, exist_ok=True)
+        with open(os.path.join(bp_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+            f.write(bp.model_dump_json(indent=2))
+        return bp
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Worker '{req.worker_id}' not found")
+    except (LLMGenerationError, LLMTimeoutError) as llm_err:
+        logger.error("LLM Generation failed for '%s': %s", req.trend_title, llm_err)
+        raise HTTPException(
+            status_code=504 if isinstance(llm_err, LLMTimeoutError) else 502,
+            detail=str(llm_err),
+        )
     except Exception as exc:
         logger.exception("Error generating video blueprint")
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/video/blueprint/stream")
+async def stream_generate_blueprint_endpoint(
+    req: VideoBlueprintRequest,
+    llm: LLMService = Depends(get_llm_service),
+):
+    """Streams live step-by-step agentic execution telemetry and neural tokens via SSE (Server-Sent Events)."""
+    async def sse_stream():
+        event_queue = asyncio.Queue()
+
+        async def on_step(step: TraceStep):
+            await event_queue.put({"type": "step", "step": step.model_dump()})
+
+        async def on_token(token: str):
+            await event_queue.put({"type": "token", "token": token})
+
+        async def run_generation():
+            try:
+                bp = await video_engine.generate_blueprint_from_trend(
+                    worker_id=req.worker_id,
+                    trend_title=req.trend_title,
+                    trend_summary=req.trend_summary,
+                    source_trend_id=req.source_trend_id,
+                    llm=llm,
+                    step_callback=on_step,
+                    token_callback=on_token,
+                )
+                video_renderer.blueprints[bp.blueprint_id] = bp
+                bp_dir = os.path.join(video_renderer.clips_dir, bp.blueprint_id)
+                os.makedirs(bp_dir, exist_ok=True)
+                with open(os.path.join(bp_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+                    f.write(bp.model_dump_json(indent=2))
+                await event_queue.put({"type": "complete", "blueprint": bp.model_dump()})
+            except Exception as e:
+                logger.exception("Error in stream_generate_blueprint_endpoint")
+                await event_queue.put({"type": "error", "error": str(e)})
+            finally:
+                await event_queue.put(None)
+
+        task = asyncio.create_task(run_generation())
+        try:
+            while True:
+                item = await event_queue.get()
+                if item is None:
+                    break
+                yield f"data: {json.dumps(item)}\n\n"
+        finally:
+            await task
+
+    return StreamingResponse(sse_stream(), media_type="text/event-stream")
+
+@router.post("/video/blueprint/{blueprint_id}/regenerate-script", response_model=VideoProductionBlueprint)
+async def regenerate_blueprint_script_endpoint(
+    blueprint_id: str,
+    llm: LLMService = Depends(get_llm_service),
+):
+    """Regenerates the complete screenplay using local Neural LLM (Llama 3.1) with generous timeout and zero static templates."""
+    bp = video_renderer.get_or_load_blueprint(blueprint_id)
+    if not bp:
+        raise HTTPException(status_code=404, detail=f"Blueprint '{blueprint_id}' not found")
+
+    try:
+        worker = get_worker(bp.worker_id)
+        scenes, hook_text, cta_text, description, telemetry = await script_director_agent.craft_screenplay(
+            worker=worker,
+            trend_title=bp.title,
+            trend_summary=bp.description,
+            llm=llm,
+        )
+        bp.scenes = scenes
+        bp.description = description
+        bp.telemetry = telemetry
+        bp.total_duration_seconds = sum(s.duration_seconds for s in scenes)
+
+        # Save updated blueprint
+        video_renderer.blueprints[blueprint_id] = bp
+        bp_dir = os.path.join(video_renderer.clips_dir, blueprint_id)
+        os.makedirs(bp_dir, exist_ok=True)
+        with open(os.path.join(bp_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+            f.write(bp.model_dump_json(indent=2))
+
+        # Re-render scene clips and re-stitch master video
+        video_renderer.render_blueprint(bp)
+        return bp
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Worker '{bp.worker_id}' not found")
+    except (LLMGenerationError, LLMTimeoutError) as llm_err:
+        logger.error("LLM re-generation failed for blueprint %s: %s", blueprint_id, llm_err)
+        raise HTTPException(
+            status_code=504 if isinstance(llm_err, LLMTimeoutError) else 502,
+            detail=str(llm_err),
+        )
+    except Exception as exc:
+        logger.exception("Error regenerating script for blueprint %s", blueprint_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/video/blueprint/{blueprint_id}/regenerate-script/stream")
+async def stream_regenerate_blueprint_script_endpoint(
+    blueprint_id: str,
+    llm: LLMService = Depends(get_llm_service),
+):
+    """Streams live step-by-step execution telemetry and neural tokens when regenerating screenplay via SSE."""
+    bp = video_renderer.get_or_load_blueprint(blueprint_id)
+    if not bp:
+        raise HTTPException(status_code=404, detail=f"Blueprint '{blueprint_id}' not found")
+
+    async def sse_stream():
+        event_queue = asyncio.Queue()
+
+        async def on_step(step: TraceStep):
+            await event_queue.put({"type": "step", "step": step.model_dump()})
+
+        async def on_token(token: str):
+            await event_queue.put({"type": "token", "token": token})
+
+        async def run_regen():
+            try:
+                worker = get_worker(bp.worker_id)
+                scenes, hook_text, cta_text, description, telemetry = await script_director_agent.craft_screenplay(
+                    worker=worker,
+                    trend_title=bp.title,
+                    trend_summary=bp.description,
+                    llm=llm,
+                    step_callback=on_step,
+                    token_callback=on_token,
+                )
+                bp.scenes = scenes
+                bp.description = description
+                bp.telemetry = telemetry
+                bp.total_duration_seconds = sum(s.duration_seconds for s in scenes)
+
+                video_renderer.blueprints[blueprint_id] = bp
+                bp_dir = os.path.join(video_renderer.clips_dir, blueprint_id)
+                os.makedirs(bp_dir, exist_ok=True)
+                with open(os.path.join(bp_dir, "blueprint.json"), "w", encoding="utf-8") as f:
+                    f.write(bp.model_dump_json(indent=2))
+
+                video_renderer.render_blueprint(bp)
+                await event_queue.put({"type": "complete", "blueprint": bp.model_dump()})
+            except Exception as e:
+                logger.exception("Error in stream_regenerate_blueprint_script_endpoint")
+                await event_queue.put({"type": "error", "error": str(e)})
+            finally:
+                await event_queue.put(None)
+
+        task = asyncio.create_task(run_regen())
+        try:
+            while True:
+                item = await event_queue.get()
+                if item is None:
+                    break
+                yield f"data: {json.dumps(item)}\n\n"
+        finally:
+            await task
+
+    return StreamingResponse(sse_stream(), media_type="text/event-stream")
 
 @router.post("/video/render", response_model=RenderJobStatus)
 async def render_video_endpoint(blueprint: VideoProductionBlueprint):
@@ -289,6 +463,34 @@ async def regenerate_single_scene_endpoint(
     except Exception as exc:
         logger.exception("Error regenerating scene %d for blueprint %s", scene_idx, blueprint_id)
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/video/blueprint/{blueprint_id}/scene/{scene_idx}/reroll", response_model=RenderJobStatus)
+async def reroll_scene_visual_endpoint(
+    blueprint_id: str,
+    scene_idx: int,
+):
+    """1-Click visual asset reroll: cycles to next stock asset and regenerates the scene clip immediately."""
+    try:
+        return video_renderer.render_single_scene(
+            blueprint_id=blueprint_id,
+            scene_idx=scene_idx,
+            update=SceneUpdateRequest(reroll_visual=True),
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        logger.exception("Error rerolling visual for scene %d on blueprint %s", scene_idx, blueprint_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/video/stock-search", response_model=list[StockSearchItem])
+async def search_stock_media_endpoint(
+    query: str = Query(..., min_length=1),
+    orientation: str = Query("portrait"),
+    limit: int = Query(8, ge=1, le=20),
+):
+    """Live search across Unsplash 4K photography and local stock library."""
+    items = material_service.search_stock_library(query=query, orientation=orientation, limit=limit)
+    return [StockSearchItem(**i) for i in items]
 
 @router.get("/video/stock-materials", response_model=list[StockMaterialItem])
 async def list_stock_materials_endpoint(worker_id: str | None = None):

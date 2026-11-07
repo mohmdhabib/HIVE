@@ -1,0 +1,426 @@
+{
+  "blueprint_id": "vbp-d46671d5e662",
+  "worker_id": "tech",
+  "source_trend_id": null,
+  "title": "Next-Gen Robotics Fleet Deployed",
+  "description": "How autonomous factory fleets are setting new output records.",
+  "scenes": [
+    {
+      "scene_id": "s01-hook",
+      "emotional_beat": "hook",
+      "retention_zone": "critical",
+      "duration_seconds": 3.8,
+      "visual": {
+        "description": "Robots working",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "robot arm",
+          "factory"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "high_contrast"
+      },
+      "audio": {
+        "voiceover_text": "Robotics just changed manufacturing forever.",
+        "voiceover_emphasis": [
+          "Robotics",
+          "just"
+        ],
+        "voice_tone": "urgent",
+        "sfx_cue": "impact",
+        "music_energy": "peak",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "glitch",
+      "pacing_note": "Scene 1 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s02-tension",
+      "emotional_beat": "tension",
+      "retention_zone": "build",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Factory line",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "conveyor",
+          "manufacturing"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_left",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "Legacy factories can no longer match this operational velocity.",
+        "voiceover_emphasis": [
+          "Legacy",
+          "factories"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "suspense_sting",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 2 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s03-revelation",
+      "emotional_beat": "revelation",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Precision laser",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "laser",
+          "engineering"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "New neural control systems allow instant adaptation to any part geometry.",
+        "voiceover_emphasis": [
+          "New",
+          "neural"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "reveal_chime",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 3 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s04-escalation",
+      "emotional_beat": "escalation",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Quality screen",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "inspection",
+          "screen"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_right",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "Error rates have plunged by over ninety-five percent across pilot runs.",
+        "voiceover_emphasis": [
+          "Error",
+          "rates"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "whoosh",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 4 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s05-twist",
+      "emotional_beat": "twist",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Neural net",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "ai code",
+          "datacenter"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_out",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "Engineers no longer write custom kinematics; they train reward functions.",
+        "voiceover_emphasis": [
+          "Engineers",
+          "no"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": null,
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 5 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s06-payoff",
+      "emotional_beat": "payoff",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Financial graph",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "roi",
+          "finance"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "The real surprise is the total capital expenditure payback window.",
+        "voiceover_emphasis": [
+          "The",
+          "real"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "impact",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 6 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s07-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Modern plant",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "clean room",
+          "future"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "ken_burns",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "Payback is achieved in under seven months instead of three years.",
+        "voiceover_emphasis": [
+          "Payback",
+          "is"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "reveal_chime",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 7 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s08-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Brand outro",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "robotics logo",
+          "dark studio"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "Follow for daily breakthroughs in robotics and hardware engineering.",
+        "voiceover_emphasis": [
+          "Follow",
+          "for"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "whoosh",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 8 cadence locked. Maintain speech rhythm without pause."
+    }
+  ],
+  "total_duration_seconds": 33.2,
+  "brand": {
+    "worker_id": "tech",
+    "brand_name": "Signal Tech",
+    "logo_path": null,
+    "watermark_position": "bottom_right",
+    "watermark_opacity": 0.3,
+    "colors": {
+      "primary": "#00d4ff",
+      "secondary": "#0a0e1a",
+      "accent": "#7c3aed",
+      "text_primary": "#ffffff",
+      "text_secondary": "#a0a0a0",
+      "caption_highlight": "#00d4ff",
+      "caption_background": "rgba(0,0,0,0.7)"
+    },
+    "typography": {
+      "heading_font": "JetBrains Mono Bold",
+      "body_font": "Inter-Regular",
+      "caption_font": "JetBrains Mono Bold",
+      "caption_size": 44
+    },
+    "intro_template": null,
+    "outro_template": null,
+    "default_voice": "en-US-GuyNeural",
+    "voice_speed": 1.08
+  },
+  "captions": {
+    "style": "word_highlight",
+    "position": "bottom_center",
+    "max_words_per_line": 5,
+    "highlight_color": "#00d4ff",
+    "base_color": "#ffffff",
+    "shadow_color": "#000000",
+    "font_size": 44,
+    "stroke_width": 3,
+    "animation": "pop"
+  },
+  "hook_variants": [
+    {
+      "variant_id": "hook-contrarian",
+      "variant_label": "Contrarian Warning",
+      "hook_text": "Everyone is wrong about Next-Gen Robotics Fleet Deployed. Here's the proof.",
+      "hook_visual_description": "Red warning text flash with camera shake effect",
+      "predicted_retention_3s": 0.72,
+      "hook_archetype": "contrarian"
+    },
+    {
+      "variant_id": "hook-curiosity",
+      "variant_label": "Curiosity Gap",
+      "hook_text": "I spent 48 hours testing Next-Gen Robotics Fleet Deployed and what I found changes everything.",
+      "hook_visual_description": "Personal POV shot transitioning to evidence montage",
+      "predicted_retention_3s": 0.68,
+      "hook_archetype": "curiosity_gap"
+    },
+    {
+      "variant_id": "hook-stat-shock",
+      "variant_label": "Statistical Shock",
+      "hook_text": "97% of people don't know this about Next-Gen Robotics Fleet Deployed. Number 3 will surprise you.",
+      "hook_visual_description": "Large animated percentage counter with dramatic reveal",
+      "predicted_retention_3s": 0.65,
+      "hook_archetype": "stat_paradox"
+    }
+  ],
+  "selected_hook_variant": "hook-contrarian",
+  "thumbnail": {
+    "headline_text": "NEXT-GEN ROBOTICS FLEET DEPLOYED",
+    "subtext": "by Signal Tech",
+    "emotion": "curiosity",
+    "layout": "split_diagonal",
+    "background_image_keywords": [
+      "next",
+      "gen",
+      "robotics"
+    ],
+    "use_brand_colors": true,
+    "face_overlay": false,
+    "arrow_or_circle": true
+  },
+  "export": {
+    "primary": {
+      "aspect_ratio": "9:16",
+      "resolution": "1080x1920",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "square": {
+      "aspect_ratio": "1:1",
+      "resolution": "1080x1080",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "landscape": null
+  },
+  "virality_score": {
+    "overall_score": 93,
+    "hook_strength": 100,
+    "pacing_quality": 100,
+    "visual_variety": 86,
+    "audio_energy": 100,
+    "cta_clarity": 85,
+    "shareability": 90,
+    "risk_flags": [],
+    "recommendation": "publish"
+  },
+  "telemetry": {
+    "engine_mode": "ollama_llama3.1",
+    "model_name": "llama3.1",
+    "research_latency_seconds": 0.0,
+    "screenplay_archetype": "myth_buster",
+    "llm_connected": true,
+    "llm_error_reason": null,
+    "target_audience": "Curious professionals, developers, and builders",
+    "angle_discovered": "myth_buster",
+    "event_trace": [
+      {
+        "timestamp": "18:38:44.485",
+        "phase": "RESEARCH",
+        "message": "Analyzing trend entities & viral hooks for topic: 'Next-Gen Robotics Fleet Deployed' (Brand: Signal Tech)"
+      },
+      {
+        "timestamp": "18:38:44.485",
+        "phase": "RESEARCH",
+        "message": "Identified primary entity: 'Next-Gen' | Core topic: 'Next-Gen Robotics Fleet Deployed'"
+      },
+      {
+        "timestamp": "18:38:44.485",
+        "phase": "STRATEGY",
+        "message": "Selected screenplay archetype: 'myth_buster' targeting Curious professionals, developers, and builders"
+      },
+      {
+        "timestamp": "18:38:44.485",
+        "phase": "LLM_DISPATCH",
+        "message": "Dispatching prompt to Ollama model 'llama3.1' (generous timeout: 100s)"
+      },
+      {
+        "timestamp": "18:38:44.485",
+        "phase": "LLM_COMPLETE",
+        "message": "Ollama generated 8-scene bespoke script in 0.0s"
+      },
+      {
+        "timestamp": "18:38:44.485",
+        "phase": "FINALIZED",
+        "message": "Crafted 8 bespoke scenes | Total agent latency: 0.0s | Mode: ollama_llama3.1"
+      }
+    ]
+  },
+  "hashtags": [
+    "#shorts",
+    "#viral",
+    "#aiandtechnology",
+    "#next-gen",
+    "#robotics",
+    "#fleet",
+    "#deployed"
+  ],
+  "target_platforms": [
+    "youtube_shorts",
+    "instagram_reels",
+    "tiktok"
+  ],
+  "monetization_links": [],
+  "created_at": "2026-11-07T18:38:44.485096+00:00"
+}

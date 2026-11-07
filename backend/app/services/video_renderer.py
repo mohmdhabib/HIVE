@@ -63,6 +63,7 @@ class VideoRenderService:
 
         self.jobs: Dict[str, RenderJobStatus] = {}
         self.blueprints: Dict[str, VideoProductionBlueprint] = {}
+        self._scene_reroll_offsets: Dict[str, int] = {}
 
     def get_job(self, job_or_blueprint_id: str) -> Optional[RenderJobStatus]:
         if job_or_blueprint_id in self.jobs:
@@ -953,17 +954,8 @@ class VideoRenderService:
     ) -> RenderJobStatus:
         """Regenerates a single scene clip with updated text, keywords, motion, or custom asset,
         and re-stitches the master video."""
-        blueprint = self.blueprints.get(blueprint_id)
+        blueprint = self.get_or_load_blueprint(blueprint_id)
         bp_clips_dir = os.path.join(self.clips_dir, blueprint_id)
-
-        if not blueprint and os.path.exists(os.path.join(bp_clips_dir, "blueprint.json")):
-            try:
-                with open(os.path.join(bp_clips_dir, "blueprint.json"), "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    blueprint = VideoProductionBlueprint(**data)
-                    self.blueprints[blueprint_id] = blueprint
-            except Exception as e:
-                logger.error("Failed loading cached blueprint: %s", e)
 
         if not blueprint:
             raise ValueError(f"Blueprint '{blueprint_id}' not found")
@@ -1030,12 +1022,34 @@ class VideoRenderService:
             scale_w, scale_h = 1920, 1080
         vf_base = f"scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,crop={scale_w}:{scale_h},setsar=1{filter_clause}"
 
-        footage_type = "custom_vault_asset" if update.custom_asset_path else "stock"
-        source_desc = os.path.basename(update.custom_asset_path) if update.custom_asset_path else scene.visual.description
-        if update.custom_asset_path and os.path.exists(update.custom_asset_path):
-            if update.custom_asset_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+        # Track re-roll offset per scene
+        reroll_key = f"{blueprint_id}:{scene_idx}"
+        if update.reroll_visual:
+            self._scene_reroll_offsets[reroll_key] = self._scene_reroll_offsets.get(reroll_key, 0) + 1
+        elif update.result_offset:
+            self._scene_reroll_offsets[reroll_key] = update.result_offset
+        current_offset = self._scene_reroll_offsets.get(reroll_key, 0)
+
+        # Resolve custom asset: local file or remote download
+        resolved_custom_path = None
+        if update.custom_asset_path:
+            if update.custom_asset_path.startswith("http://") or update.custom_asset_path.startswith("https://"):
+                try:
+                    resolved_custom_path = material_service.download_photo_by_url(
+                        update.custom_asset_path,
+                        photo_id=f"{blueprint_id}_s{scene_idx}_{abs(hash(update.custom_asset_path)) % 100000}",
+                    )
+                except Exception as ex:
+                    logger.error("Failed downloading custom remote asset: %s", ex)
+            elif os.path.exists(update.custom_asset_path):
+                resolved_custom_path = update.custom_asset_path
+
+        footage_type = "custom_vault_asset" if resolved_custom_path else "stock"
+        source_desc = os.path.basename(resolved_custom_path) if resolved_custom_path else scene.visual.description
+        if resolved_custom_path and os.path.exists(resolved_custom_path):
+            if resolved_custom_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
                 material_service.convert_image_to_motion_video(
-                    update.custom_asset_path,
+                    resolved_custom_path,
                     duration,
                     scene_bg_video,
                     motion_type=scene.visual.camera_motion,
@@ -1044,7 +1058,7 @@ class VideoRenderService:
                 cmd = [
                     ffmpeg_bin, "-y",
                     "-stream_loop", "-1",
-                    "-i", update.custom_asset_path,
+                    "-i", resolved_custom_path,
                     "-t", str(duration),
                     "-vf", vf_base,
                     "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
@@ -1062,6 +1076,7 @@ class VideoRenderService:
                 brand_color=blueprint.brand.colors.primary,
                 scene_idx=scene_idx,
                 camera_motion=scene.visual.camera_motion,
+                result_offset=current_offset,
             )
             if filter_clause:
                 tmp_f = scene_bg_video + ".filtered.mp4"

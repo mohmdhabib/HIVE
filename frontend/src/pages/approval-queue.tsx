@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type TaskReport } from "@/lib/api";
+import { api, type TaskReport, type TraceStep } from "@/lib/api";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -29,6 +29,8 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StockPickerModal } from "@/components/StockPickerModal";
+import { LiveTraceabilityBox } from "@/components/LiveTraceabilityBox";
 
 interface TaskMetadata {
   blueprint_id?: string;
@@ -50,6 +52,7 @@ interface TaskMetadata {
     target_audience?: string;
     angle_discovered?: string;
     event_trace?: Array<{ timestamp: string; phase: string; message: string }>;
+    trace_steps?: TraceStep[];
   } | null;
 }
 
@@ -93,6 +96,10 @@ export default function ApprovalQueuePage() {
     step?: string | null;
   } | null>(null);
 
+  // Asset Picker & Re-roll State
+  const [pickerState, setPickerState] = useState<{ sceneIdx: number; keywords: string[] } | null>(null);
+  const [rerollingSceneIdx, setRerollingSceneIdx] = useState<number | null>(null);
+
   // Poll tasks awaiting approval
   const { data: tasks = [] } = useQuery({
     queryKey: ["pending-tasks"],
@@ -126,6 +133,107 @@ export default function ApprovalQueuePage() {
         progress: job.progress_pct || 10,
         step: job.current_step,
       });
+    },
+  });
+
+  // Re-roll footage mutation for a single scene
+  const rerollMutation = useMutation({
+    mutationFn: async ({ blueprintId, sceneIdx }: { blueprintId: string; sceneIdx: number }) => {
+      setRerollingSceneIdx(sceneIdx);
+      return api.rerollSceneVisual(blueprintId, sceneIdx);
+    },
+    onSuccess: () => {
+      if (activeBlueprintId) {
+        queryClient.invalidateQueries({ queryKey: ["scene-clips", activeBlueprintId] });
+      }
+    },
+    onSettled: () => {
+      setRerollingSceneIdx(null);
+    },
+  });
+
+  // Replace asset mutation for a single scene
+  const replaceAssetMutation = useMutation({
+    mutationFn: async ({ blueprintId, sceneIdx, assetPath }: { blueprintId: string; sceneIdx: number; assetPath: string }) => {
+      setRerollingSceneIdx(sceneIdx);
+      return api.regenerateSceneClip(blueprintId, sceneIdx, {
+        custom_asset_path: assetPath,
+      });
+    },
+    onSuccess: () => {
+      if (activeBlueprintId) {
+        queryClient.invalidateQueries({ queryKey: ["scene-clips", activeBlueprintId] });
+      }
+    },
+    onSettled: () => {
+      setRerollingSceneIdx(null);
+    },
+  });
+
+  const [isStreamingRegen, setIsStreamingRegen] = useState(false);
+  const [streamTraceSteps, setStreamTraceSteps] = useState<TraceStep[]>([]);
+  const [streamTokens, setStreamTokens] = useState<string>("");
+  const [streamElapsed, setStreamElapsed] = useState<number>(0);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const streamTimerRef = useRef<number | any>(null);
+
+  const handleStartStreamingRegenerateScript = async (blueprintId: string) => {
+    setIsStreamingRegen(true);
+    setStreamError(null);
+    setStreamTokens("");
+    setStreamTraceSteps([
+      {
+        step_id: "init",
+        title: "Re-generating Screenplay with Llama 3.1",
+        phase: "init",
+        status: "running",
+        detail: `Connecting to local Ollama runtime on host for blueprint ${blueprintId}...`,
+        timestamp: new Date().toISOString().substring(11, 19),
+      },
+    ]);
+    const startT = Date.now();
+    setStreamElapsed(0);
+    if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+    streamTimerRef.current = setInterval(() => {
+      setStreamElapsed((Date.now() - startT) / 1000);
+    }, 100);
+
+    try {
+      await api.streamRegenerateScript(
+        blueprintId,
+        (step) => {
+          setStreamTraceSteps((prev) => {
+            const copy = [...prev];
+            const idx = copy.findIndex((s) => s.step_id === step.step_id);
+            if (idx >= 0) copy[idx] = step;
+            else copy.push(step);
+            return copy;
+          });
+        },
+        (token) => {
+          setStreamTokens((prev) => prev + token);
+        }
+      );
+      queryClient.invalidateQueries({ queryKey: ["approval-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["scene-clips", blueprintId] });
+    } catch (err: any) {
+      console.error("Streaming script regeneration error:", err);
+      setStreamError(err?.message || "Script regeneration halted");
+    } finally {
+      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+      setIsStreamingRegen(false);
+    }
+  };
+
+  const regenerateScriptMutation = useMutation({
+    mutationFn: async (blueprintId: string) => {
+      return api.regenerateBlueprintScript(blueprintId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["approval-tasks"] });
+      if (activeBlueprintId) {
+        queryClient.invalidateQueries({ queryKey: ["scene-clips", activeBlueprintId] });
+      }
     },
   });
 
@@ -512,7 +620,7 @@ export default function ApprovalQueuePage() {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2 font-mono text-[9px]">
+                      <div className="flex flex-wrap items-center gap-2 font-mono text-[9px]">
                         {activeMeta.telemetry?.engine_mode === "ollama_llama3.1" ? (
                           <span className="flex items-center gap-1 rounded bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-emerald-400 font-semibold">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -521,20 +629,53 @@ export default function ApprovalQueuePage() {
                         ) : (
                           <span className="flex items-center gap-1 rounded bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-amber-300 font-semibold" title={activeMeta.telemetry?.llm_error_reason || "Ollama offline on 11434"}>
                             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                            AGENTIC DYNAMIC NLP SYNTHESIZER
+                            FACT-BASED EXTRACTIVE
                           </span>
                         )}
                         <span className="rounded bg-surface-raised border border-border px-2 py-0.5 text-gray-300 uppercase">
                           ARCHETYPE: {activeMeta.telemetry?.screenplay_archetype || activeMeta.hook_angle || "CONTRARIAN"}
                         </span>
+                        {activeBlueprintId && (
+                          <button
+                            type="button"
+                            onClick={() => handleStartStreamingRegenerateScript(activeBlueprintId)}
+                            disabled={isStreamingRegen}
+                            className="flex items-center gap-1 rounded bg-hive px-2.5 py-1 font-bold text-[#090b10] hover:bg-hive-400 disabled:opacity-50 transition-all shadow-sm"
+                            title="Regenerate this video screenplay with local Llama 3.1 Neural LLM"
+                          >
+                            {isStreamingRegen ? (
+                              <>
+                                <Loader2 size={10} className="animate-spin text-[#090b10]" />
+                                <span>AI GENERATING ({streamElapsed.toFixed(1)}s)…</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles size={10} />
+                                <span>RE-GENERATE SCRIPT WITH AI</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {activeMeta.telemetry?.llm_error_reason && (
-                      <div className="rounded bg-amber-500/5 border border-amber-500/20 px-3 py-1.5 text-[10px] text-amber-300/90 font-mono">
-                        ℹ️ {activeMeta.telemetry.llm_error_reason} — Bespoke narrative synthesized dynamically.
-                      </div>
-                    )}
+                    {/* Antigravity-Style Traceability & Live Execution Accordion */}
+                    <LiveTraceabilityBox
+                      isGenerating={isStreamingRegen}
+                      currentTaskTitle={isStreamingRegen ? `Synthesizing Screenplay for Task #${activeTask?.task_id}` : `Screenplay Agent Execution Trace`}
+                      traceSteps={
+                        isStreamingRegen || streamTraceSteps.length > 0
+                          ? streamTraceSteps
+                          : (activeMeta.telemetry?.trace_steps || [])
+                      }
+                      liveTokens={streamTokens}
+                      elapsedSeconds={streamElapsed > 0 ? streamElapsed : (activeMeta.telemetry?.research_latency_seconds || 0)}
+                      error={streamError || activeMeta.telemetry?.llm_error_reason}
+                      archetype={activeMeta.telemetry?.screenplay_archetype}
+                      engineMode={activeMeta.telemetry?.engine_mode}
+                      onRetry={activeBlueprintId ? () => handleStartStreamingRegenerateScript(activeBlueprintId) : undefined}
+                      defaultExpanded={false}
+                    />
 
                     {/* Controls to toggle Trace Log and Visual Matching Pipeline */}
                     <div className="flex items-center gap-2 pt-1 font-mono text-[10px]">
@@ -617,13 +758,49 @@ export default function ApprovalQueuePage() {
                                   Keywords: <span className="text-hive/80">{clip.search_keywords?.join(", ") || "niche default"}</span> | Asset: {clip.source_asset || "motion video"}
                                 </div>
                               </div>
-                              {clip.thumbnail_path && (
-                                <img
-                                  src={clip.thumbnail_path}
-                                  alt="Scene Thumbnail"
-                                  className="h-10 w-8 object-cover rounded border border-border/80 shrink-0"
-                                />
-                              )}
+                              <div className="flex items-center gap-2 shrink-0">
+                                {clip.thumbnail_path && (
+                                  <img
+                                    src={clip.thumbnail_path}
+                                    alt="Scene Thumbnail"
+                                    className="h-12 w-9 object-cover rounded-lg border border-border/80 shrink-0 shadow-sm"
+                                  />
+                                )}
+                                <div className="flex flex-col gap-1">
+                                  <button
+                                    type="button"
+                                    title="Try another stock photo/video"
+                                    disabled={rerollingSceneIdx === clip.scene_idx}
+                                    onClick={() => {
+                                      if (activeBlueprintId) {
+                                        rerollMutation.mutate({ blueprintId: activeBlueprintId, sceneIdx: clip.scene_idx });
+                                      }
+                                    }}
+                                    className="flex items-center gap-1 rounded bg-surface hover:bg-surface-deep border border-border px-2 py-1 font-mono text-[9px] text-gray-300 hover:text-hive transition-colors disabled:opacity-50"
+                                  >
+                                    {rerollingSceneIdx === clip.scene_idx ? (
+                                      <Loader2 size={10} className="animate-spin text-hive" />
+                                    ) : (
+                                      <RotateCw size={10} />
+                                    )}
+                                    <span>RE-ROLL</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Search & pick or upload a different image"
+                                    onClick={() => {
+                                      setPickerState({
+                                        sceneIdx: clip.scene_idx,
+                                        keywords: clip.search_keywords || [],
+                                      });
+                                    }}
+                                    className="flex items-center gap-1 rounded bg-hive/10 hover:bg-hive/20 border border-hive/30 px-2 py-1 font-mono text-[9px] text-hive font-semibold transition-colors"
+                                  >
+                                    <Clapperboard size={10} />
+                                    <span>SWAP</span>
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -843,6 +1020,25 @@ export default function ApprovalQueuePage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Interactive Stock & Media Asset Picker Modal */}
+      {pickerState && activeBlueprintId && (
+        <StockPickerModal
+          isOpen={true}
+          onClose={() => setPickerState(null)}
+          sceneIdx={pickerState.sceneIdx}
+          keywords={pickerState.keywords}
+          workerId={activeTask?.worker_id || "tech"}
+          onSelectAsset={(assetPath) => {
+            replaceAssetMutation.mutate({
+              blueprintId: activeBlueprintId,
+              sceneIdx: pickerState.sceneIdx,
+              assetPath,
+            });
+            setPickerState(null);
+          }}
+        />
       )}
     </div>
   );

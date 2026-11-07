@@ -50,7 +50,7 @@ async def test_script_director_crafts_unique_screenplays():
     assert isinstance(telem_a, GenerationTelemetry)
     assert telem_a.screenplay_archetype != ""
     assert len(telem_a.event_trace) >= 3
-    assert any("Synthesizing unique" in e.get("message", "") for e in telem_a.event_trace)
+    assert any("scenes" in e.get("message", "").lower() for e in telem_a.event_trace)
 
 
 @pytest.mark.anyio
@@ -64,3 +64,93 @@ async def test_script_director_camera_motion_sanitization():
     )
     for sc in scenes:
         assert sc.visual.camera_motion in ["static", "slow_zoom_in", "slow_zoom_out", "pan_left", "pan_right", "ken_burns"]
+
+
+def test_script_director_json_repair_truncated():
+    # Test JSON repair when trailing braces/brackets are missing
+    truncated_json = '{\n  "hook": "Test hook",\n  "cta": "Test cta",\n  "description": "Test desc",\n  "scenes": [\n    {"voiceover": "Scene 1", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"},\n    {"voiceover": "Scene 2", "search_keywords": ["k1", "k2"], "camera_motion": "pan_left"},\n    {"voiceover": "Scene 3", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_out"},\n    {"voiceover": "Scene 4", "search_keywords": ["k1", "k2"], "camera_motion": "pan_right"}'
+    repaired = script_director_agent._repair_and_parse_json(truncated_json)
+    assert repaired is not None
+    assert "scenes" in repaired
+    assert len(repaired["scenes"]) == 4
+
+
+@pytest.mark.anyio
+async def test_script_director_raises_on_llm_failure():
+    from unittest.mock import AsyncMock, MagicMock
+    from app.core.exceptions import LLMGenerationError
+
+    worker = get_worker("tech")
+    failing_llm = MagicMock()
+    failing_llm.model = "mock-failing-llm"
+    failing_llm.timeout = 1.0
+    failing_llm.generate = AsyncMock(return_value="NOT_JSON_AT_ALL")
+
+    # Strict zero-template policy: must raise LLMGenerationError when LLM fails
+    with pytest.raises(LLMGenerationError):
+        await script_director_agent.craft_screenplay(
+            worker=worker,
+            trend_title="Hypothetical Trend Topic",
+            llm=failing_llm,
+        )
+
+
+@pytest.mark.anyio
+async def test_script_director_with_step_and_token_callbacks():
+    import json
+    from unittest.mock import MagicMock
+    from app.schemas.video import TraceStep
+
+    worker = get_worker("tech")
+    mock_llm = MagicMock()
+    mock_llm.model = "llama3.1"
+    mock_llm.timeout = 60.0
+
+    async def mock_stream(*args, **kwargs):
+        chunks = ['{"hook": "Breakthrough", ', '"cta": "Follow", ', '"description": "Desc", ', '"scenes": [',
+                  '{"voiceover": "S1", "visual_description": "V1", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"},',
+                  '{"voiceover": "S2", "visual_description": "V2", "search_keywords": ["k1", "k2"], "camera_motion": "pan_left"},',
+                  '{"voiceover": "S3", "visual_description": "V3", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"},',
+                  '{"voiceover": "S4", "visual_description": "V4", "search_keywords": ["k1", "k2"], "camera_motion": "pan_right"},',
+                  '{"voiceover": "S5", "visual_description": "V5", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_out"},',
+                  '{"voiceover": "S6", "visual_description": "V6", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"},',
+                  '{"voiceover": "S7", "visual_description": "V7", "search_keywords": ["k1", "k2"], "camera_motion": "ken_burns"},',
+                  '{"voiceover": "S8", "visual_description": "V8", "search_keywords": ["k1", "k2"], "camera_motion": "slow_zoom_in"}]}'
+        ]
+        for c in chunks:
+            yield c
+
+    mock_llm.generate_stream = mock_stream
+
+    steps_recorded: list[TraceStep] = []
+    tokens_recorded: list[str] = []
+
+    async def on_step(step: TraceStep):
+        steps_recorded.append(step)
+
+    async def on_token(token: str):
+        tokens_recorded.append(token)
+
+    scenes, hook, cta, desc, telem = await script_director_agent.craft_screenplay(
+        worker=worker,
+        trend_title="Autonomous Robotics Deployment",
+        trend_summary="Robotics fleet deployed in production.",
+        llm=mock_llm,
+        step_callback=on_step,
+        token_callback=on_token,
+    )
+
+    assert len(scenes) == 8
+    assert len(tokens_recorded) > 0
+    assert len(steps_recorded) >= 5
+    step_phases = [s.phase for s in steps_recorded]
+    assert "init" in step_phases
+    assert "research" in step_phases
+    assert "strategy" in step_phases
+    assert "llm_complete" in step_phases
+    assert "visuals" in step_phases
+    assert "audio" in step_phases
+    assert "complete" in step_phases
+    assert len(telem.trace_steps) >= 5
+
+

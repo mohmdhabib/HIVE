@@ -140,6 +140,17 @@ export interface ViralityScorecard {
   recommendation: string;
 }
 
+export interface TraceStep {
+  step_id: string;
+  title: string;
+  phase: string;
+  status: "pending" | "running" | "completed" | "warning" | "error";
+  detail: string;
+  snippet?: string | null;
+  elapsed_ms?: number | null;
+  timestamp: string;
+}
+
 export interface GenerationTelemetry {
   engine_mode: "ollama_llama3.1" | "agentic_nlp_synthesizer";
   model_name: string;
@@ -150,6 +161,7 @@ export interface GenerationTelemetry {
   target_audience: string;
   angle_discovered: string;
   event_trace: Array<{ timestamp: string; phase: string; message: string }>;
+  trace_steps?: TraceStep[];
 }
 
 export interface VideoProductionBlueprint {
@@ -204,6 +216,17 @@ export interface SceneUpdateRequest {
   bgm_track?: string;
   visual_filter?: "none" | "vibrant" | "cinematic" | "cyberpunk";
   aspect_ratio?: "9:16" | "1:1" | "16:9";
+  reroll_visual?: boolean;
+  result_offset?: number;
+}
+
+export interface StockSearchItem {
+  id: string;
+  title: string;
+  thumbnail_url: string;
+  regular_url: string;
+  author?: string | null;
+  source: string;
 }
 
 export interface SceneReorderRequest {
@@ -731,6 +754,116 @@ export const api = {
   stockMaterials: (worker_id?: string) => {
     const query = worker_id ? `?worker_id=${encodeURIComponent(worker_id)}` : "";
     return request<StockMaterialItem[]>(`/video/stock-materials${query}`);
+  },
+  searchStock: (query: string, orientation: string = "portrait") =>
+    request<StockSearchItem[]>(`/video/stock-search?query=${encodeURIComponent(query)}&orientation=${encodeURIComponent(orientation)}`),
+  rerollSceneVisual: (blueprintId: string, sceneIdx: number) =>
+    request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/${sceneIdx}/reroll`, {
+      method: "POST",
+    }),
+  regenerateBlueprintScript: (blueprintId: string) =>
+    request<VideoProductionBlueprint>(`/video/blueprint/${encodeURIComponent(blueprintId)}/regenerate-script`, {
+      method: "POST",
+    }),
+  streamBlueprint: async (
+    payload: { worker_id: string; trend_title: string; trend_summary?: string; source_trend_id?: string },
+    onStep: (step: TraceStep) => void,
+    onToken?: (token: string) => void,
+  ): Promise<VideoProductionBlueprint> => {
+    const res = await fetch("/api/video/blueprint/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Blueprint stream failed with status ${res.status}`);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No readable stream response");
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalBlueprint: VideoProductionBlueprint | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data: ")) {
+          const jsonStr = trimmed.slice(6);
+          try {
+            const data = JSON.parse(jsonStr);
+            if (data.type === "step" && data.step) {
+              onStep(data.step);
+            } else if (data.type === "token" && data.token && onToken) {
+              onToken(data.token);
+            } else if (data.type === "complete" && data.blueprint) {
+              finalBlueprint = data.blueprint;
+            } else if (data.type === "error") {
+              throw new Error(data.error);
+            }
+          } catch (err: any) {
+            if (err?.message && !err.message.includes("JSON")) throw err;
+          }
+        }
+      }
+    }
+    if (!finalBlueprint) {
+      throw new Error("Generation completed without returning blueprint payload.");
+    }
+    return finalBlueprint;
+  },
+  streamRegenerateScript: async (
+    blueprintId: string,
+    onStep: (step: TraceStep) => void,
+    onToken?: (token: string) => void,
+  ): Promise<VideoProductionBlueprint> => {
+    const res = await fetch(`/api/video/blueprint/${encodeURIComponent(blueprintId)}/regenerate-script/stream`, {
+      method: "POST",
+    });
+    if (!res.ok) {
+      throw new Error(`Regenerate stream failed with status ${res.status}`);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No readable stream response");
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalBlueprint: VideoProductionBlueprint | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data: ")) {
+          const jsonStr = trimmed.slice(6);
+          try {
+            const data = JSON.parse(jsonStr);
+            if (data.type === "step" && data.step) {
+              onStep(data.step);
+            } else if (data.type === "token" && data.token && onToken) {
+              onToken(data.token);
+            } else if (data.type === "complete" && data.blueprint) {
+              finalBlueprint = data.blueprint;
+            } else if (data.type === "error") {
+              throw new Error(data.error);
+            }
+          } catch (err: any) {
+            if (err?.message && !err.message.includes("JSON")) throw err;
+          }
+        }
+      }
+    }
+    if (!finalBlueprint) {
+      throw new Error("Script regeneration completed without returning blueprint payload.");
+    }
+    return finalBlueprint;
   },
   regenerateSceneClip: (blueprintId: string, sceneIdx: number, data: SceneUpdateRequest) =>
     request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/${sceneIdx}/render`, {

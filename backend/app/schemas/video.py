@@ -237,6 +237,17 @@ class VideoProductionBlueprint(BaseModel):
 # 10. AI GENERATION TELEMETRY & LOG TRACE
 # ---------------------------------------------------------------------------
 
+class TraceStep(BaseModel):
+    """Step-by-step agentic execution milestone for live traceability."""
+    step_id: str
+    title: str
+    phase: str
+    status: str = "completed"
+    detail: str = ""
+    snippet: Optional[str] = None
+    elapsed_ms: Optional[int] = None
+    timestamp: str = ""
+
 class GenerationTelemetry(BaseModel):
     engine_mode: Literal["ollama_llama3.1", "agentic_nlp_synthesizer"] = "agentic_nlp_synthesizer"
     model_name: str = "llama3.1:latest"
@@ -247,6 +258,7 @@ class GenerationTelemetry(BaseModel):
     target_audience: str = "general"
     angle_discovered: str = "contrarian"
     event_trace: List[Dict[str, str]] = Field(default_factory=list)
+    trace_steps: List[TraceStep] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +281,6 @@ class SceneClipArtifact(BaseModel):
     source_asset: Optional[str] = None
     resolved_footage_type: Optional[str] = None
     resolved_footage_query: Optional[str] = None
-    status: str = "ready"
     status: Literal["ready", "rendering", "failed"] = "ready"
 
 
@@ -280,6 +291,8 @@ class SceneUpdateRequest(BaseModel):
     camera_motion: Optional[str] = None
     visual_description: Optional[str] = None
     custom_asset_path: Optional[str] = None
+    reroll_visual: bool = False
+    result_offset: int = 0
     caption_position: Optional[Literal["bottom", "center", "top", "bottom_center", "top_center"]] = None
     caption_font_size: Optional[int] = None
     caption_highlight_color: Optional[str] = None
@@ -289,6 +302,16 @@ class SceneUpdateRequest(BaseModel):
     bgm_track: Optional[str] = None
     visual_filter: Optional[Literal["none", "vibrant", "cinematic", "cyberpunk"]] = None
     aspect_ratio: Optional[Literal["9:16", "1:1", "16:9"]] = None
+
+
+class StockSearchItem(BaseModel):
+    """Live search result from stock photography providers (Unsplash, local vault)."""
+    id: str
+    title: str
+    thumbnail_url: str
+    regular_url: str
+    author: Optional[str] = None
+    source: str = "unsplash"
 
 
 class SceneReorderRequest(BaseModel):

@@ -11,6 +11,7 @@ import {
   type RenderedVideoItem,
   type VaultAsset,
   type StockMaterialItem,
+  type TraceStep,
 } from "@/lib/api";
 import { useWorkers } from "@/hooks/use-workers";
 import { useAppStore } from "@/stores/app-store";
@@ -45,6 +46,7 @@ import {
   RefreshCw,
   RotateCw,
   Scissors,
+  Search,
   Send,
   Sliders,
   Sparkles,
@@ -62,6 +64,8 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StockPickerModal } from "@/components/StockPickerModal";
+import { LiveTraceabilityBox } from "@/components/LiveTraceabilityBox";
 
 const BEAT_COLORS: Record<string, string> = {
   hook: "bg-red-500/20 text-red-400 border-red-500/30",
@@ -242,7 +246,16 @@ export default function VideoStudioPage() {
   const [editedAspectRatio, setEditedAspectRatio] = useState<"9:16" | "1:1" | "16:9">("9:16");
   const [editedSfxCue, setEditedSfxCue] = useState<string>("whoosh");
   const [scriptStyle, setScriptStyle] = useState<"punchy" | "curiosity_gap" | "controversial" | "conversational">("punchy");
+  const [isStockPickerModalOpen, setIsStockPickerModalOpen] = useState(false);
   const assetFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Live Generation Traceability & Streaming State
+  const [isStreamingGeneration, setIsStreamingGeneration] = useState(false);
+  const [liveTraceSteps, setLiveTraceSteps] = useState<TraceStep[]>([]);
+  const [liveTokens, setLiveTokens] = useState<string>("");
+  const [liveElapsedSeconds, setLiveElapsedSeconds] = useState<number>(0);
+  const [liveGenerationError, setLiveGenerationError] = useState<string | null>(null);
+  const liveTimerRef = useRef<number | any>(null);
 
   const activeWorker = workers.find((w) => w.id === selectedWorkerId) || workers[0];
 
@@ -327,14 +340,15 @@ export default function VideoStudioPage() {
 
   // Regenerate Single Scene Mutation
   const regenerateSceneMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: (overrideAssetPath?: string) => {
       if (!blueprint || selectedSceneIndex < 0) return Promise.reject("No scene selected");
       const keywords = editedKeywords.split(",").map((k) => k.trim()).filter(Boolean);
+      const assetToUse = overrideAssetPath !== undefined ? overrideAssetPath : (selectedVaultAsset || undefined);
       return api.regenerateSceneClip(blueprint.blueprint_id, selectedSceneIndex, {
         voiceover_text: editedVoiceover.trim() || undefined,
         search_keywords: keywords.length > 0 ? keywords : undefined,
         camera_motion: editedMotion || undefined,
-        custom_asset_path: selectedVaultAsset || undefined,
+        custom_asset_path: assetToUse,
         caption_position: editedCaptionPosition,
         caption_font_size: editedFontSize,
         caption_highlight_color: editedHighlightColor,
@@ -352,6 +366,36 @@ export default function VideoStudioPage() {
         const updatedBp = await api.getBlueprint(blueprint.blueprint_id);
         setBlueprint(updatedBp);
       }
+      refetchClips();
+      queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    },
+  });
+
+  // 1-Click Visual Asset Re-roll Mutation
+  const rerollVisualMutation = useMutation({
+    mutationFn: () => {
+      if (!blueprint || selectedSceneIndex < 0) return Promise.reject("No scene selected");
+      return api.rerollSceneVisual(blueprint.blueprint_id, selectedSceneIndex);
+    },
+    onSuccess: async (updatedJob) => {
+      setRenderJob(updatedJob);
+      if (blueprint) {
+        const updatedBp = await api.getBlueprint(blueprint.blueprint_id);
+        setBlueprint(updatedBp);
+      }
+      refetchClips();
+      queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    },
+  });
+
+  // Full Screenplay Re-generation with Neural LLM Mutation
+  const regenerateScriptMutation = useMutation({
+    mutationFn: () => {
+      if (!blueprint) return Promise.reject("No blueprint loaded");
+      return api.regenerateBlueprintScript(blueprint.blueprint_id);
+    },
+    onSuccess: async (updatedBp) => {
+      setBlueprint(updatedBp);
       refetchClips();
       queryClient.invalidateQueries({ queryKey: ["video-library"] });
     },
@@ -456,6 +500,119 @@ export default function VideoStudioPage() {
       setIsAssetPickerOpen(false);
     },
   });
+
+  const handleStartStreamingGeneration = async () => {
+    if (!trendTitle.trim()) return;
+    setIsStreamingGeneration(true);
+    setLiveGenerationError(null);
+    setLiveTokens("");
+    setLiveTraceSteps([
+      {
+        step_id: "init",
+        title: "Initializing Creative Director Agent",
+        phase: "init",
+        status: "running",
+        detail: `Target Worker: ${selectedWorkerId || "tech"} | Topic: '${trendTitle.trim()}'`,
+        timestamp: new Date().toISOString().substring(11, 19),
+      },
+    ]);
+    const startT = Date.now();
+    setLiveElapsedSeconds(0);
+    if (liveTimerRef.current) clearInterval(liveTimerRef.current);
+    liveTimerRef.current = setInterval(() => {
+      setLiveElapsedSeconds((Date.now() - startT) / 1000);
+    }, 100);
+
+    try {
+      const data = await api.streamBlueprint(
+        {
+          worker_id: selectedWorkerId || "tech",
+          trend_title: trendTitle.trim(),
+          trend_summary: trendSummary.trim() || undefined,
+        },
+        (step) => {
+          setLiveTraceSteps((prev) => {
+            const copy = [...prev];
+            const idx = copy.findIndex((s) => s.step_id === step.step_id);
+            if (idx >= 0) {
+              copy[idx] = step;
+            } else {
+              copy.push(step);
+            }
+            return copy;
+          });
+        },
+        (token) => {
+          setLiveTokens((prev) => prev + token);
+        }
+      );
+
+      setBlueprint(data);
+      setRenderJob(null);
+      setDispatchedApproval(false);
+      setActivePanel("scenes");
+      setSelectedSceneId(data.scenes[0]?.scene_id || null);
+    } catch (err: any) {
+      console.error("Streaming blueprint generation failed:", err);
+      setLiveGenerationError(err?.message || "Generation halted");
+    } finally {
+      if (liveTimerRef.current) clearInterval(liveTimerRef.current);
+      setIsStreamingGeneration(false);
+    }
+  };
+
+  const handleStartStreamingRegenerateScript = async () => {
+    if (!blueprint) return;
+    setIsStreamingGeneration(true);
+    setLiveGenerationError(null);
+    setLiveTokens("");
+    setLiveTraceSteps([
+      {
+        step_id: "init",
+        title: "Re-generating Screenplay with Llama 3.1",
+        phase: "init",
+        status: "running",
+        detail: `Connecting to local Ollama runtime for '${blueprint.title}'...`,
+        timestamp: new Date().toISOString().substring(11, 19),
+      },
+    ]);
+    const startT = Date.now();
+    setLiveElapsedSeconds(0);
+    if (liveTimerRef.current) clearInterval(liveTimerRef.current);
+    liveTimerRef.current = setInterval(() => {
+      setLiveElapsedSeconds((Date.now() - startT) / 1000);
+    }, 100);
+
+    try {
+      const updatedBp = await api.streamRegenerateScript(
+        blueprint.blueprint_id,
+        (step) => {
+          setLiveTraceSteps((prev) => {
+            const copy = [...prev];
+            const idx = copy.findIndex((s) => s.step_id === step.step_id);
+            if (idx >= 0) {
+              copy[idx] = step;
+            } else {
+              copy.push(step);
+            }
+            return copy;
+          });
+        },
+        (token) => {
+          setLiveTokens((prev) => prev + token);
+        }
+      );
+      setBlueprint(updatedBp);
+      refetchClips();
+      queryClient.invalidateQueries({ queryKey: ["video-library"] });
+    } catch (err: any) {
+      console.error("Script regeneration failed:", err);
+      setLiveGenerationError(err?.message || "Script regeneration halted");
+    } finally {
+      if (liveTimerRef.current) clearInterval(liveTimerRef.current);
+      setIsStreamingGeneration(false);
+    }
+  };
 
   const blueprintMutation = useMutation({
     mutationFn: () =>
@@ -765,13 +922,36 @@ export default function VideoStudioPage() {
           </div>
         </div>
 
+        {/* Live Traceability & Execution Log Box */}
+        {(isStreamingGeneration || liveTraceSteps.length > 0) && (
+          <LiveTraceabilityBox
+            isGenerating={isStreamingGeneration}
+            currentTaskTitle={isStreamingGeneration ? `Synthesizing Screenplay for '${trendTitle}'` : `Screenplay Execution Trace`}
+            traceSteps={liveTraceSteps}
+            liveTokens={liveTokens}
+            elapsedSeconds={liveElapsedSeconds}
+            error={liveGenerationError}
+            onRetry={handleStartStreamingGeneration}
+            className="my-2"
+          />
+        )}
+
         <button
-          onClick={() => blueprintMutation.mutate()}
-          disabled={blueprintMutation.isPending || !trendTitle.trim()}
+          onClick={handleStartStreamingGeneration}
+          disabled={isStreamingGeneration || !trendTitle.trim()}
           className="flex items-center gap-2 rounded-xl bg-hive px-6 py-3 font-mono text-xs font-bold text-[#090b10] hover:bg-hive-400 transition-all shadow-[0_0_25px_rgba(245,166,35,0.25)] hover:shadow-[0_0_35px_rgba(245,166,35,0.4)] disabled:opacity-50"
         >
-          <Film size={15} />
-          {blueprintMutation.isPending ? "GENERATING BLUEPRINT & SCENE GRAPH…" : "GENERATE AI VIDEO BLUEPRINT"}
+          {isStreamingGeneration ? (
+            <>
+              <Loader2 size={15} className="animate-spin text-[#090b10]" />
+              <span>SYNTHESIZING SCREENPLAY ({liveElapsedSeconds.toFixed(1)}s)…</span>
+            </>
+          ) : (
+            <>
+              <Film size={15} />
+              <span>GENERATE AI VIDEO BLUEPRINT</span>
+            </>
+          )}
         </button>
       </div>
 
@@ -1244,7 +1424,7 @@ export default function VideoStudioPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 font-mono text-[10px]">
+                <div className="flex flex-wrap items-center gap-2 font-mono text-[10px]">
                   {blueprint?.telemetry?.engine_mode === "ollama_llama3.1" ? (
                     <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-emerald-400 font-semibold">
                       <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -1253,20 +1433,51 @@ export default function VideoStudioPage() {
                   ) : (
                     <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-amber-300 font-semibold">
                       <span className="h-2 w-2 rounded-full bg-amber-400" />
-                      AGENTIC DYNAMIC NLP SYNTHESIZER
+                      FACT-BASED EXTRACTIVE
                     </span>
                   )}
                   <span className="rounded bg-surface-deep border border-border px-2.5 py-1 text-gray-300 uppercase">
                     ARCHETYPE: {blueprint?.telemetry?.screenplay_archetype || "CONTRARIAN PARADOX"}
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleStartStreamingRegenerateScript}
+                    disabled={isStreamingGeneration}
+                    className="flex items-center gap-1.5 rounded-lg bg-hive px-3 py-1 text-[10px] font-bold text-[#090b10] hover:bg-hive-400 disabled:opacity-50 transition-all shadow-sm"
+                    title="Write a 100% new, bespoke screenplay using local Llama 3.1"
+                  >
+                    {isStreamingGeneration ? (
+                      <>
+                        <Loader2 size={11} className="animate-spin text-[#090b10]" />
+                        <span>AI GENERATING ({liveElapsedSeconds.toFixed(1)}s)…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={11} />
+                        <span>RE-GENERATE SCRIPT WITH AI</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
-              {blueprint?.telemetry?.llm_error_reason && (
-                <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3.5 text-xs text-amber-300 font-mono">
-                  💡 Notice: {blueprint.telemetry.llm_error_reason}. To enable direct 8B local neural generation, run <code className="bg-black/40 px-1.5 py-0.5 rounded text-white font-bold">ollama serve</code> in your terminal.
-                </div>
-              )}
+              {/* Antigravity-Style Traceability & Live Execution Accordion */}
+              <LiveTraceabilityBox
+                isGenerating={isStreamingGeneration}
+                currentTaskTitle={isStreamingGeneration ? `Synthesizing Screenplay for '${blueprint?.title}'` : `Screenplay Agent Execution Trace`}
+                traceSteps={
+                  isStreamingGeneration || liveTraceSteps.length > 0
+                    ? liveTraceSteps
+                    : (blueprint?.telemetry?.trace_steps || [])
+                }
+                liveTokens={liveTokens}
+                elapsedSeconds={liveElapsedSeconds > 0 ? liveElapsedSeconds : (blueprint?.telemetry?.research_latency_seconds || 0)}
+                error={liveGenerationError || blueprint?.telemetry?.llm_error_reason}
+                archetype={blueprint?.telemetry?.screenplay_archetype}
+                engineMode={blueprint?.telemetry?.engine_mode}
+                onRetry={handleStartStreamingRegenerateScript}
+                defaultExpanded={true}
+              />
 
               {/* Grid 1: Research Strategy & Entity Breakdown */}
               <div className="grid gap-4 md:grid-cols-3 font-mono text-xs">
@@ -2461,37 +2672,97 @@ export default function VideoStudioPage() {
                       </div>
 
                       {/* Field 4: Visual Footage & Background Asset Selector */}
-                      <div className="space-y-2 rounded-xl border border-border bg-surface-deep p-3.5">
+                      <div className="space-y-3 rounded-xl border border-border bg-surface-deep p-3.5">
                         <div className="flex items-center justify-between">
-                          <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider">
-                            VISUAL FOOTAGE & BACKGROUND ASSET
+                          <label className="font-mono text-[9px] text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <ImageIcon size={12} className="text-hive" />
+                            <span>VISUAL FOOTAGE & BACKGROUND MEDIA</span>
                           </label>
-                          <div className="flex items-center gap-2">
-                            {selectedVaultAsset && (
-                              <button
-                                onClick={() => setSelectedVaultAsset("")}
-                                className="text-[9px] font-mono text-red-400 hover:underline"
-                              >
-                                RESET TO DYNAMIC MATCH
-                              </button>
-                            )}
+                          {selectedVaultAsset && (
                             <button
-                              type="button"
-                              onClick={() => setIsAssetPickerOpen(true)}
-                              className="flex items-center gap-1 rounded bg-hive/10 border border-hive/30 px-2.5 py-1 font-mono text-[9px] font-bold text-hive hover:bg-hive/20"
+                              onClick={() => setSelectedVaultAsset("")}
+                              className="text-[9px] font-mono text-red-400 hover:underline"
                             >
-                              <Clapperboard size={10} />
-                              BROWSE ASSET VAULT ({stockMaterials.length + vaultAssets.length})
+                              RESET TO DYNAMIC MATCH
                             </button>
-                          </div>
+                          )}
                         </div>
 
-                        {selectedVaultAsset ? (
-                          <div className="flex items-center justify-between rounded-lg border border-hive/40 bg-black/40 p-2.5 text-xs">
-                            <div className="flex items-center gap-2 truncate">
-                              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                              <span className="font-mono text-[10px] text-gray-200 truncate">{selectedVaultAsset}</span>
+                        {/* Interactive Media Control Bar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {/* Button 1: 1-Click Re-roll */}
+                          <button
+                            type="button"
+                            onClick={() => rerollVisualMutation.mutate()}
+                            disabled={rerollVisualMutation.isPending}
+                            className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 font-mono text-[10px] font-bold text-gray-200 hover:border-hive/50 hover:text-hive transition-all disabled:opacity-50 shadow-sm"
+                            title="Cycle to next matching 4K stock footage for this scene"
+                          >
+                            {rerollVisualMutation.isPending ? (
+                              <Loader2 size={12} className="animate-spin text-hive" />
+                            ) : (
+                              <RotateCw size={12} className="text-hive" />
+                            )}
+                            <span>RE-ROLL STOCK</span>
+                          </button>
+
+                          {/* Button 2: Search Stock Gallery */}
+                          <button
+                            type="button"
+                            onClick={() => setIsStockPickerModalOpen(true)}
+                            className="flex items-center justify-center gap-1.5 rounded-xl border border-hive/40 bg-hive/10 px-3 py-2 font-mono text-[10px] font-bold text-hive hover:bg-hive/20 transition-all shadow-sm"
+                            title="Search live 4K vertical photography and pick an exact image"
+                          >
+                            <Search size={12} />
+                            <span>SEARCH 4K GALLERY</span>
+                          </button>
+
+                          {/* Button 3: Upload Custom Media */}
+                          <button
+                            type="button"
+                            onClick={() => assetFileInputRef.current?.click()}
+                            disabled={uploadAssetMutation.isPending}
+                            className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 font-mono text-[10px] font-bold text-gray-200 hover:text-white hover:border-border/80 transition-all disabled:opacity-50 shadow-sm"
+                            title="Upload local image or video file"
+                          >
+                            {uploadAssetMutation.isPending ? (
+                              <Loader2 size={12} className="animate-spin text-hive" />
+                            ) : (
+                              <Upload size={12} className="text-gray-400" />
+                            )}
+                            <span>UPLOAD MEDIA</span>
+                          </button>
+                        </div>
+
+                        {/* Current Resolved Media Status Card */}
+                        <div className="flex items-center justify-between rounded-xl border border-border/80 bg-black/40 p-2.5 text-xs">
+                          <div className="flex items-center gap-2.5 truncate">
+                            {currentSceneClip?.thumbnail_path ? (
+                              <img
+                                src={currentSceneClip.thumbnail_path}
+                                alt="Scene Preview"
+                                className="h-10 w-8 object-cover rounded-md border border-border shrink-0"
+                              />
+                            ) : (
+                              <div className="h-10 w-8 rounded-md bg-surface border border-border flex items-center justify-center text-gray-500 shrink-0">
+                                <ImageIcon size={14} />
+                              </div>
+                            )}
+                            <div className="space-y-0.5 truncate">
+                              <div className="flex items-center gap-1.5 font-mono text-[9px]">
+                                <span className="text-gray-400">Current Asset:</span>
+                                <span className="text-emerald-400 font-semibold truncate">
+                                  {selectedVaultAsset
+                                    ? `Custom Override (${selectedVaultAsset.split(/[\\/]/).pop()})`
+                                    : (currentSceneClip?.resolved_footage_type || "Dynamic 4K Stock")}
+                                </span>
+                              </div>
+                              <div className="font-mono text-[8px] text-gray-500 truncate">
+                                {currentSceneClip?.source_asset || selectedScene.visual.description}
+                              </div>
                             </div>
+                          </div>
+                          {selectedVaultAsset && (
                             <button
                               type="button"
                               onClick={() => setSelectedVaultAsset("")}
@@ -2500,17 +2771,8 @@ export default function VideoStudioPage() {
                             >
                               <X size={12} />
                             </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between rounded-lg border border-border bg-black/20 p-2.5 text-xs">
-                            <span className="font-mono text-[10px] text-gray-400">
-                              ⚡ Dynamic AI Stock Matching (Curated Stock Bank / Unsplash HD)
-                            </span>
-                            <span className="rounded bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 font-mono text-[8px] text-emerald-400">
-                              ACTIVE
-                            </span>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
 
                       {/* Scene Metadata Preview */}
@@ -3334,6 +3596,22 @@ export default function VideoStudioPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 4K Live Stock Footage & Image Picker Modal */}
+      {isStockPickerModalOpen && blueprint && selectedScene && (
+        <StockPickerModal
+          isOpen={isStockPickerModalOpen}
+          onClose={() => setIsStockPickerModalOpen(false)}
+          sceneIdx={selectedSceneIndex}
+          keywords={selectedScene.visual.search_keywords}
+          workerId={blueprint.worker_id}
+          onSelectAsset={(assetPath) => {
+            setSelectedVaultAsset(assetPath);
+            setIsStockPickerModalOpen(false);
+            regenerateSceneMutation.mutate(assetPath);
+          }}
+        />
       )}
     </div>
   );

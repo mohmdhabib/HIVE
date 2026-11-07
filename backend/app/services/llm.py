@@ -38,16 +38,20 @@ class LLMService:
         temperature: float = 0.4,
         system: str | None = None,
         format: str | None = None,
+        options: dict | None = None,
     ) -> str:
         """Call Ollama for text generation with optional JSON format constraint under concurrency control."""
         async with self.semaphore:
             logger.info("LLM text request started (model=%s, prompt_len=%d, format=%s)", self.model, len(prompt), format)
-            timeout = httpx.Timeout(self.timeout, connect=1.5)
+            timeout = httpx.Timeout(self.timeout, connect=15.0)
+            gen_options = {"temperature": temperature, "num_ctx": 4096, "num_predict": 1400}
+            if options:
+                gen_options.update(options)
             payload = {
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
-                "options": {"temperature": temperature, "num_ctx": 4096},
+                "options": gen_options,
             }
             if system:
                 payload["system"] = system
@@ -71,6 +75,56 @@ class LLMService:
                 logger.error("LLM service error: %s", exc)
                 raise LLMError(str(exc)) from exc
 
+    async def generate_stream(
+        self,
+        prompt: str,
+        temperature: float = 0.4,
+        system: str | None = None,
+        format: str | None = None,
+        options: dict | None = None,
+    ):
+        """Call Ollama for streaming text generation under concurrency control."""
+        async with self.semaphore:
+            logger.info("LLM stream request started (model=%s, prompt_len=%d, format=%s)", self.model, len(prompt), format)
+            timeout = httpx.Timeout(self.timeout, connect=15.0)
+            gen_options = {"temperature": temperature, "num_ctx": 4096, "num_predict": 1400}
+            if options:
+                gen_options.update(options)
+            payload = {
+                "model": self.model,
+                "prompt": prompt,
+                "stream": True,
+                "options": gen_options,
+            }
+            if system:
+                payload["system"] = system
+            if format:
+                payload["format"] = format
+
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream("POST", f"{self.url}/api/generate", json=payload) as response:
+                        response.raise_for_status()
+                        async for line in response.aiter_lines():
+                            if not line:
+                                continue
+                            try:
+                                chunk = json.loads(line)
+                                token = chunk.get("response", "")
+                                if token:
+                                    yield token
+                            except Exception:
+                                continue
+            except httpx.TimeoutException as exc:
+                logger.error("LLM timeout after %ss: %s", self.timeout, exc)
+                raise LLMTimeoutError(f"Ollama request timed out after {self.timeout}s") from exc
+            except httpx.HTTPStatusError as exc:
+                logger.error("LLM HTTP error %d: %s", exc.response.status_code, exc)
+                raise LLMError(f"Ollama returned HTTP {exc.response.status_code}") from exc
+            except Exception as exc:
+                logger.error("LLM stream error: %s", exc)
+                raise LLMError(str(exc)) from exc
+
     async def generate_structured(
         self,
         prompt: str,
@@ -88,7 +142,7 @@ class LLMService:
 
         async with self.semaphore:
             logger.info("LLM structured request started (model=%s, schema=%s)", self.model, schema.__name__)
-            timeout = httpx.Timeout(self.timeout, connect=1.5)
+            timeout = httpx.Timeout(self.timeout, connect=15.0)
             payload = {
                 "model": self.model,
                 "prompt": prompt,

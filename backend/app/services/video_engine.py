@@ -29,7 +29,7 @@ import json
 import uuid
 import asyncio
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from app.schemas.video import (
     VideoProductionBlueprint,
@@ -558,6 +558,8 @@ class VideoIntelligenceEngine:
         trend_summary: Optional[str] = None,
         source_trend_id: Optional[str] = None,
         llm: Optional[LLMService] = None,
+        step_callback: Optional[Any] = None,
+        token_callback: Optional[Any] = None,
     ) -> VideoProductionBlueprint:
         """Generate a complete video production blueprint from a trending topic with agentic scriptwriting."""
         worker = get_worker(worker_id)
@@ -578,6 +580,8 @@ class VideoIntelligenceEngine:
             trend_title=trend_title,
             trend_summary=trend_summary,
             llm=active_llm,
+            step_callback=step_callback,
+            token_callback=token_callback,
         )
 
         blueprint_id = f"vbp-{uuid.uuid4().hex[:12]}"
