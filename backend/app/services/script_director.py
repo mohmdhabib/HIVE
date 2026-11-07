@@ -14,9 +14,11 @@ from app.schemas.video import (
     RetentionZone,
     GenerationTelemetry,
     TraceStep,
+    ResearchSourceItem,
 )
 from app.workers.registry import WorkerConfig, get_worker
 from app.services.llm import LLMService
+from app.services.trend_research import trend_research_service, ResearchEvidenceReport
 from app.core.logging import get_logger
 from app.core.exceptions import LLMGenerationError
 
@@ -96,11 +98,52 @@ class ScriptDirectorAgent:
             detail=f"Target Brand: '{worker.name}' (Niche: {worker.niche}) | Tone: {worker.voice}",
         )
 
-        # Extract entities & concepts
+        # 1. Dispatch Live Agentic Web Research
+        await record_step(
+            step_id="web_research",
+            title="Agentic Web & News Discovery",
+            phase="web_dispatch",
+            status="running",
+            detail=f"Querying Google News RSS, Reddit Community Feeds, and Google Trends for '{trend_title}'...",
+        )
+        research_dossier: ResearchEvidenceReport = await trend_research_service.research_topic_deep(
+            topic=trend_title,
+            worker_id=worker.niche,
+        )
+
+        sources_summary = ", ".join(research_dossier.websites_visited[:4]) or "live web sources"
+        source_links_snippet = "\n".join([f"🔗 [{s.source_name}] {s.title} ({s.domain})" for s in research_dossier.sources[:3]])
+
+        await record_step(
+            step_id="web_research",
+            title="Agentic Web & News Discovery",
+            phase="web_complete",
+            status="completed",
+            detail=f"Ingested {len(research_dossier.sources)} verified sources across [{sources_summary}] in {research_dossier.latency_seconds}s",
+            snippet=source_links_snippet,
+        )
+
+        # 2. Evidence Ingestion & Fact Extraction
+        facts_snippet = "\n".join([f"• {f}" for f in research_dossier.factual_bullet_points[:3]])
+        await record_step(
+            step_id="fact_extraction",
+            title="Evidence Ingestion & Fact Extraction",
+            phase="source_extraction",
+            status="completed",
+            detail=f"Extracted {len(research_dossier.factual_bullet_points)} factual anchors from live web intelligence",
+            snippet=facts_snippet,
+        )
+
+        # 3. Intelligent Entity & Topic Extraction (strips stopwords like 'latest', 'season', 'new')
+        STOP_WORDS = {
+            "this", "that", "with", "from", "have", "what", "more", "latest", "newest", "best",
+            "worst", "about", "every", "some", "update", "season", "chapter", "release",
+            "news", "leak", "leaks", "everything", "changed", "here", "look", "video", "breakdown"
+        }
         clean_title = re.sub(r"[^\w\s—:-]", "", trend_title).strip()
-        words = [w for w in clean_title.split() if len(w) > 3 and w.lower() not in {"this", "that", "with", "from", "have", "what", "more"}]
-        topic_core = " ".join(words[:4]) if words else clean_title[:30]
-        primary_entity = words[0] if words else worker.niche
+        non_stop_words = [w for w in clean_title.split() if len(w) > 2 and w.lower() not in STOP_WORDS]
+        primary_entity = non_stop_words[0].title() if non_stop_words else clean_title.split()[0].title()
+        topic_core = clean_title.title()
 
         await record_step(
             step_id="research",
@@ -158,6 +201,8 @@ class ScriptDirectorAgent:
                             archetype=chosen_archetype,
                             temperature=0.35 if attempt == 1 else 0.2,
                             token_callback=token_callback,
+                            researched_sources=research_dossier.sources,
+                            factual_bullets=research_dossier.factual_bullet_points,
                         ),
                         timeout=llm_timeout_sec,
                     )
@@ -337,6 +382,8 @@ class ScriptDirectorAgent:
             angle_discovered=chosen_archetype,
             event_trace=events,
             trace_steps=trace_steps,
+            researched_sources=research_dossier.sources,
+            extracted_facts=research_dossier.factual_bullet_points,
         )
 
         return scenes, hook_text, cta_text, description, telemetry
@@ -350,6 +397,8 @@ class ScriptDirectorAgent:
         archetype: str,
         temperature: float = 0.35,
         token_callback: Optional[Callable[[str], Awaitable[None]]] = None,
+        researched_sources: Optional[List[ResearchSourceItem]] = None,
+        factual_bullets: Optional[List[str]] = None,
     ) -> Optional[dict]:
         """Queries Ollama for a full 8-scene screenplay with per-scene visuals and narration, with optional token streaming."""
         system_prompt = (
@@ -360,7 +409,11 @@ class ScriptDirectorAgent:
             f"2. Write a gripping, investigative 8-scene screenplay about '{trend_title}'. Every scene must reveal real, topic-specific facts, data, or narrative tension.\n"
             "3. DO NOT output static business or finance cliches unless the topic is specifically about business/finance.\n"
             f"4. Narrative Angle: '{archetype.upper()}'.\n"
-            "5. Return ONLY a valid JSON object matching this schema without markdown fences:\n"
+            "5. VISUAL KEYWORD RULES FOR STOCK FOOTAGE:\n"
+            "   - 'search_keywords' must be concrete physical visuals that stock photography banks (Unsplash, Pexels) possess.\n"
+            "   - FOR GAMING TOPICS (Fortnite, Roblox, GTA, Minecraft, esports, etc.): NEVER generate corporate terms ('boardroom', 'audit', 'compliance') or outdoor landscape terms ('architectural view', 'tree', 'sky', 'park'). ALWAYS generate concrete gaming visuals: 'rgb gaming setup neon', 'cyberpunk controller in hands', 'pro gamer headset streaming', 'futuristic esports battle arena', 'mechanical rgb keyboard'.\n"
+            "   - FOR TECH TOPICS: use 'neon server racks datacenter', 'cyberpunk coding terminal', 'ai robotics laboratory'.\n"
+            "6. Return ONLY a valid JSON object matching this schema without markdown fences:\n"
             "{\n"
             '  "hook": "3-second scroll stopping statement",\n'
             '  "cta": "Urgent call to follow",\n'
@@ -378,11 +431,22 @@ class ScriptDirectorAgent:
             "}"
         )
 
+        evidence_block = ""
+        if researched_sources:
+            evidence_block += "\nVERIFIED RESEARCH SOURCES INGESTED:\n"
+            for s in researched_sources[:4]:
+                evidence_block += f"- [{s.source_name}] \"{s.title}\" (Domain: {s.domain})\n  Summary: {s.summary_snippet}\n"
+        if factual_bullets:
+            evidence_block += "\nKEY FACTUAL ANCHORS & DISCUSSIONS:\n"
+            for f in factual_bullets[:4]:
+                evidence_block += f"- {f}\n"
+
         user_prompt = (
             f"Write an investigative, highly viral 8-scene short-form video screenplay about this trending topic:\n"
             f"TOPIC: {trend_title}\n"
             f"DETAILS: {trend_summary or trend_title}\n"
-            f"Make the voiceover natural, engaging, and directly centered on {trend_title}."
+            f"{evidence_block}\n"
+            f"MANDATORY: Make the voiceover natural, punchy, and directly incorporate these real-world findings and facts about {trend_title}."
         )
 
         if token_callback and hasattr(llm, "generate_stream"):
@@ -481,69 +545,137 @@ class ScriptDirectorAgent:
         primary_entity: str,
         topic_core: str,
     ) -> dict:
-        """Dynamic fact-derived screenplay composer for offline/test environments."""
+        """Dynamic fact-derived screenplay composer for offline/test environments with domain-locked stock keyword alignment."""
+        from app.services.visual_intelligence import visual_intelligence, SemanticDomain
+
         niche = worker.niche
         clean_title = trend_title.split(":")[0].split("—")[0].strip()
         summary_core = (trend_summary or f"New developments in {clean_title} are accelerating across {niche}.").strip()
 
-        scenes = [
-            {
-                "voiceover": f"Here is the breakdown of {clean_title} that everyone in {niche} is talking about.",
-                "visual_description": f"Cinematic high-contrast visual showcasing {primary_entity} in action.",
-                "search_keywords": [f"{primary_entity.lower()} visual", f"{niche} breakthrough", "cinematic technology studio"],
-                "camera_motion": "slow_zoom_in",
-                "sfx_cue": "impact",
-            },
-            {
-                "voiceover": f"The core development centers on {topic_core}, and early reactions are already reshaping the space.",
-                "visual_description": f"Analytical visualization highlighting data points and community reactions to {primary_entity}.",
-                "search_keywords": [f"{primary_entity.lower()} analysis", "modern analytics interface", "creative workspace"],
-                "camera_motion": "pan_left",
-                "sfx_cue": "suspense_sting",
-            },
-            {
-                "voiceover": f"What makes {clean_title} distinct is how rapidly creators and developers are adopting it.",
-                "visual_description": f"Dynamic sequence showing real-world application of {primary_entity}.",
-                "search_keywords": [f"{primary_entity.lower()} innovation", "digital creators working", "high tech display"],
-                "camera_motion": "slow_zoom_in",
-                "sfx_cue": "reveal_chime",
-            },
-            {
-                "voiceover": f"{summary_core}",
-                "visual_description": f"In-depth camera motion highlighting {primary_entity} ecosystem momentum.",
-                "search_keywords": [f"{niche} industry", "futuristic server lights", "motion graphic network"],
-                "camera_motion": "pan_right",
-                "sfx_cue": "whoosh",
-            },
-            {
-                "voiceover": f"Industry observers note that momentum around {topic_core} is surpassing initial projections.",
-                "visual_description": f"Close-up shots of real-time activity and community metrics for {clean_title}.",
-                "search_keywords": [f"{primary_entity.lower()} growth", "digital dashboard metrics", "modern creative studio"],
-                "camera_motion": "slow_zoom_out",
-                "sfx_cue": None,
-            },
-            {
-                "voiceover": f"The biggest takeaway is that ignoring {clean_title} right now means missing a pivotal shift in {niche}.",
-                "visual_description": f"Bold high-contrast transition revealing key conclusions about {primary_entity}.",
-                "search_keywords": [f"{primary_entity.lower()} impact", "cinematic neon reflections", "dramatic lighting"],
-                "camera_motion": "slow_zoom_in",
-                "sfx_cue": "impact",
-            },
-            {
-                "voiceover": f"Stay informed on {clean_title} as new details and updates continue to emerge.",
-                "visual_description": f"Sweeping cinematic footage capturing the broader influence across {niche}.",
-                "search_keywords": [f"{niche} perspective", "modern architectural view", "cinematic blue hour"],
-                "camera_motion": "ken_burns",
-                "sfx_cue": "reveal_chime",
-            },
-            {
-                "voiceover": f"Follow @{worker.name.replace(' ', '')} for daily frontline breakdowns on {niche} before everyone else.",
-                "visual_description": f"Minimalist outro card with active brand badge.",
-                "search_keywords": [f"{niche} channel", "clean modern ui badge", "dark luxury neon"],
-                "camera_motion": "slow_zoom_in",
-                "sfx_cue": "whoosh",
-            },
-        ]
+        domain = visual_intelligence.classify_topic_domain(
+            topic=clean_title,
+            context=summary_core,
+            worker_id=worker.niche,
+        )
+
+        if domain == SemanticDomain.GAMING_ESPORTS:
+            scenes = [
+                {
+                    "voiceover": f"Here is the breakdown of {clean_title} that everyone in gaming is talking about.",
+                    "visual_description": f"Cinematic neon RGB battlestation showcasing {clean_title} community action.",
+                    "search_keywords": ["rgb gaming setup neon", f"{primary_entity.lower()} battlestation", "cyberpunk gaming controller glow"],
+                    "camera_motion": "slow_zoom_in",
+                    "sfx_cue": "impact",
+                },
+                {
+                    "voiceover": f"The core development centers on {topic_core}, and player reactions are already exploding online.",
+                    "visual_description": f"Close-up intense gamer hands on mechanical keyboard reacting to {primary_entity}.",
+                    "search_keywords": ["esports player tournament arena", "mechanical rgb gaming keyboard", "dark gaming room neon"],
+                    "camera_motion": "pan_left",
+                    "sfx_cue": "suspense_sting",
+                },
+                {
+                    "voiceover": f"What makes {clean_title} distinct is how rapidly streamers and pro players are adapting.",
+                    "visual_description": f"High tech pro gaming rig and liquid cooled PC with illuminated lighting.",
+                    "search_keywords": ["high end liquid cooled gaming pc", "futuristic vr gamer cyberspace", "neon battle arena"],
+                    "camera_motion": "slow_zoom_in",
+                    "sfx_cue": "reveal_chime",
+                },
+                {
+                    "voiceover": f"{summary_core}",
+                    "visual_description": f"Massive esports arena stadium with roaring crowds and stadium screens.",
+                    "search_keywords": ["massive esports tournament arena stadium", "pro gamer headset streaming", "cyberpunk arcade lights"],
+                    "camera_motion": "pan_right",
+                    "sfx_cue": "whoosh",
+                },
+                {
+                    "voiceover": f"Top players note that momentum around {topic_core} is surpassing initial projections.",
+                    "visual_description": f"Dual curved gaming monitors with real-time stats and tournament standings.",
+                    "search_keywords": ["dual curved gaming monitors dark", "gamer hands mechanical keyboard speed", "neon streamer room"],
+                    "camera_motion": "slow_zoom_out",
+                    "sfx_cue": None,
+                },
+                {
+                    "voiceover": f"The biggest takeaway is that ignoring {clean_title} right now means missing a pivotal shift in gaming.",
+                    "visual_description": f"Esports championship trophy celebration under glowing arena spotlights.",
+                    "search_keywords": ["esports tournament champion trophy celebration", "cinematic neon purple gaming battlestation", "pro gamer victory win"],
+                    "camera_motion": "slow_zoom_in",
+                    "sfx_cue": "impact",
+                },
+                {
+                    "voiceover": f"Stay locked in on {clean_title} as new patches and competitive meta updates continue to drop.",
+                    "visual_description": f"Content creator streaming studio with neon tube lights and microphone.",
+                    "search_keywords": ["content creator streaming studio mic neon", "sleek minimalist dark gamer setup", "esports tournament lights"],
+                    "camera_motion": "ken_burns",
+                    "sfx_cue": "reveal_chime",
+                },
+                {
+                    "voiceover": f"Follow @{worker.name.replace(' ', '')} for daily frontline breakdowns on gaming before everyone else.",
+                    "visual_description": f"Minimalist gaming outro card with glowing brand badge.",
+                    "search_keywords": ["glowing neon gaming badge", "clean modern gamer aesthetic", "cyberpunk dark studio neon"],
+                    "camera_motion": "slow_zoom_in",
+                    "sfx_cue": "whoosh",
+                },
+            ]
+        else:
+            scenes = [
+                {
+                    "voiceover": f"Here is the breakdown of {clean_title} that everyone in {niche} is talking about.",
+                    "visual_description": f"Cinematic high-contrast visual showcasing {primary_entity} in action.",
+                    "search_keywords": [f"{primary_entity.lower()} visual", f"{niche} breakthrough", "cinematic technology studio"],
+                    "camera_motion": "slow_zoom_in",
+                    "sfx_cue": "impact",
+                },
+                {
+                    "voiceover": f"The core development centers on {topic_core}, and early reactions are already reshaping the space.",
+                    "visual_description": f"Analytical visualization highlighting data points and community reactions to {primary_entity}.",
+                    "search_keywords": [f"{primary_entity.lower()} analysis", "modern analytics interface", "creative workspace"],
+                    "camera_motion": "pan_left",
+                    "sfx_cue": "suspense_sting",
+                },
+                {
+                    "voiceover": f"What makes {clean_title} distinct is how rapidly creators and developers are adopting it.",
+                    "visual_description": f"Dynamic sequence showing real-world application of {primary_entity}.",
+                    "search_keywords": [f"{primary_entity.lower()} innovation", "digital creators working", "high tech display"],
+                    "camera_motion": "slow_zoom_in",
+                    "sfx_cue": "reveal_chime",
+                },
+                {
+                    "voiceover": f"{summary_core}",
+                    "visual_description": f"In-depth camera motion highlighting {primary_entity} ecosystem momentum.",
+                    "search_keywords": [f"{niche} industry", "futuristic server lights", "motion graphic network"],
+                    "camera_motion": "pan_right",
+                    "sfx_cue": "whoosh",
+                },
+                {
+                    "voiceover": f"Industry observers note that momentum around {topic_core} is surpassing initial projections.",
+                    "visual_description": f"Close-up shots of real-time activity and community metrics for {clean_title}.",
+                    "search_keywords": [f"{primary_entity.lower()} growth", "digital dashboard metrics", "modern creative studio"],
+                    "camera_motion": "slow_zoom_out",
+                    "sfx_cue": None,
+                },
+                {
+                    "voiceover": f"The biggest takeaway is that ignoring {clean_title} right now means missing a pivotal shift in {niche}.",
+                    "visual_description": f"Bold high-contrast transition revealing key conclusions about {primary_entity}.",
+                    "search_keywords": [f"{primary_entity.lower()} impact", "cinematic neon reflections", "dramatic lighting"],
+                    "camera_motion": "slow_zoom_in",
+                    "sfx_cue": "impact",
+                },
+                {
+                    "voiceover": f"Stay informed on {clean_title} as new details and updates continue to emerge.",
+                    "visual_description": f"Sweeping cinematic footage capturing the broader influence across {niche}.",
+                    "search_keywords": [f"{niche} perspective", "modern architectural view", "cinematic blue hour"],
+                    "camera_motion": "ken_burns",
+                    "sfx_cue": "reveal_chime",
+                },
+                {
+                    "voiceover": f"Follow @{worker.name.replace(' ', '')} for daily frontline breakdowns on {niche} before everyone else.",
+                    "visual_description": f"Minimalist outro card with active brand badge.",
+                    "search_keywords": [f"{niche} channel", "clean modern ui badge", "dark luxury neon"],
+                    "camera_motion": "slow_zoom_in",
+                    "sfx_cue": "whoosh",
+                },
+            ]
 
         return {
             "hook": f"Here is the breakdown of {clean_title} that everyone in {niche} is talking about.",

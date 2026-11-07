@@ -169,6 +169,82 @@
       "height": 1920,
       "source": "curated_stock",
       "created_at": "2026-11-06T15:24:14.941466+00:00"
+    },
+    {
+      "asset_id": "vlt-ent-gaming_esports_setup",
+      "niche": "entertainment",
+      "filename": "gaming_esports_setup.jpg",
+      "asset_type": "image",
+      "file_path": "E:\\HIVE\\storage\\materials\\vault\\entertainment\\gaming_esports_setup.jpg",
+      "relative_url": "/storage/materials/vault/entertainment/gaming_esports_setup.jpg",
+      "thumbnail_url": "/storage/materials/vault/entertainment/gaming_esports_setup.jpg",
+      "tags": [
+        "gaming",
+        "esports",
+        "setup",
+        "battlestation",
+        "neon",
+        "rgb",
+        "fortnite",
+        "roblox",
+        "pc",
+        "videogame"
+      ],
+      "duration_sec": 5.0,
+      "width": 1080,
+      "height": 1920,
+      "source": "curated_gaming_stock",
+      "created_at": "2026-11-07T19:49:30.689538+00:00"
+    },
+    {
+      "asset_id": "vlt-ent-gaming_controller_neon",
+      "niche": "entertainment",
+      "filename": "gaming_controller_neon.jpg",
+      "asset_type": "image",
+      "file_path": "E:\\HIVE\\storage\\materials\\vault\\entertainment\\gaming_controller_neon.jpg",
+      "relative_url": "/storage/materials/vault/entertainment/gaming_controller_neon.jpg",
+      "thumbnail_url": "/storage/materials/vault/entertainment/gaming_controller_neon.jpg",
+      "tags": [
+        "gaming",
+        "controller",
+        "neon",
+        "cyberpunk",
+        "fortnite",
+        "gamepad",
+        "esports",
+        "console",
+        "videogame"
+      ],
+      "duration_sec": 5.0,
+      "width": 1080,
+      "height": 1920,
+      "source": "curated_gaming_stock",
+      "created_at": "2026-11-07T19:49:30.689549+00:00"
+    },
+    {
+      "asset_id": "vlt-ent-gaming_cyber_arena",
+      "niche": "entertainment",
+      "filename": "gaming_cyber_arena.jpg",
+      "asset_type": "image",
+      "file_path": "E:\\HIVE\\storage\\materials\\vault\\entertainment\\gaming_cyber_arena.jpg",
+      "relative_url": "/storage/materials/vault/entertainment/gaming_cyber_arena.jpg",
+      "thumbnail_url": "/storage/materials/vault/entertainment/gaming_cyber_arena.jpg",
+      "tags": [
+        "gaming",
+        "esports",
+        "arena",
+        "tournament",
+        "stadium",
+        "stage",
+        "crowd",
+        "championship",
+        "fortnite"
+      ],
+      "duration_sec": 5.0,
+      "width": 1080,
+      "height": 1920,
+      "source": "curated_gaming_stock",
+      "created_at": "2026-11-07T19:49:30.689553+00:00"
     }
   ]
 }

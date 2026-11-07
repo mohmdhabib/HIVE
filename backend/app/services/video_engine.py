@@ -631,6 +631,7 @@ class VideoIntelligenceEngine:
             export=export,
             virality_score=None,
             telemetry=telemetry,
+            researched_sources=telemetry.researched_sources if telemetry else [],
             hashtags=self._generate_hashtags(worker, trend_title),
             target_platforms=["youtube_shorts", "instagram_reels", "tiktok"],
             created_at=datetime.now(timezone.utc).isoformat(),

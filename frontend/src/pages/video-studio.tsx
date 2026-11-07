@@ -1531,6 +1531,87 @@ export default function VideoStudioPage() {
                 </div>
               </div>
 
+              {/* Grid 2.5: Researched Web Sources & Live Evidence Pipeline */}
+              {((blueprint?.telemetry?.researched_sources && blueprint.telemetry.researched_sources.length > 0) ||
+                (blueprint?.researched_sources && blueprint.researched_sources.length > 0)) && (
+                <div className="rounded-xl border border-hive/30 bg-[#0a0e17] p-4 space-y-3 shadow-lg">
+                  <div className="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="h-6 w-6 rounded bg-hive/15 border border-hive/30 flex items-center justify-center text-hive">
+                        <Globe size={13} />
+                      </div>
+                      <div>
+                        <h4 className="font-mono text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>AGENTIC WEB SOURCES & FACTUAL GROUNDING</span>
+                          <span className="rounded bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] text-emerald-400 font-normal">
+                            VERIFIED LIVE INTEL
+                          </span>
+                        </h4>
+                        <p className="font-mono text-[10px] text-gray-400">
+                          External websites, news feeds, and community forums queried to build authentic context.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="font-mono text-[10px] text-hive font-semibold">
+                      {(blueprint?.telemetry?.researched_sources || blueprint?.researched_sources || []).length} SOURCES INGESTED
+                    </span>
+                  </div>
+
+                  {/* Sources List Grid */}
+                  <div className="grid gap-2.5 sm:grid-cols-2">
+                    {(blueprint?.telemetry?.researched_sources || blueprint?.researched_sources || []).map((src, i) => (
+                      <a
+                        key={i}
+                        href={src.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex flex-col justify-between rounded-lg border border-border/70 bg-surface-deep/80 p-3 hover:border-hive/60 hover:bg-surface-deep transition-all shadow-sm"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-1 text-[10px] font-mono">
+                            <span className="font-semibold text-hive flex items-center gap-1">
+                              <ExternalLink size={10} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                              {src.source_name}
+                            </span>
+                            <span className="text-gray-500 text-[9px]">
+                              {src.domain}
+                            </span>
+                          </div>
+                          <p className="font-sans text-xs font-semibold text-gray-200 group-hover:text-white line-clamp-2 transition-colors">
+                            {src.title}
+                          </p>
+                          <p className="font-mono text-[10px] text-gray-400 line-clamp-2">
+                            {src.summary_snippet}
+                          </p>
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-between pt-1.5 border-t border-white/[0.04] font-mono text-[9px] text-gray-500">
+                          <span>{src.published_at || "Recent"}</span>
+                          <span className="text-emerald-400 font-semibold">
+                            {Math.round(src.credibility_score * 100)}% Credibility
+                          </span>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+
+                  {/* Extracted Facts */}
+                  {blueprint?.telemetry?.extracted_facts && blueprint.telemetry.extracted_facts.length > 0 && (
+                    <div className="rounded-lg border border-border/50 bg-black/60 p-2.5 space-y-1 font-mono text-[11px]">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">
+                        EXTRACTED FACTUAL ANCHORS:
+                      </span>
+                      {blueprint.telemetry.extracted_facts.map((fact, idx) => (
+                        <div key={idx} className="flex items-start gap-1.5 text-gray-300">
+                          <span className="text-hive font-bold">•</span>
+                          <span>{fact}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Grid 3: Scene-by-Scene Visual Matching Pipeline */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">

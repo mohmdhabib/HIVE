@@ -225,6 +225,7 @@ class VideoProductionBlueprint(BaseModel):
 
     # AI Engine & Agent Telemetry Trace
     telemetry: Optional["GenerationTelemetry"] = None
+    researched_sources: List["ResearchSourceItem"] = Field(default_factory=list)
     
     # Metadata
     hashtags: List[str] = Field(default_factory=list)
@@ -236,6 +237,16 @@ class VideoProductionBlueprint(BaseModel):
 # ---------------------------------------------------------------------------
 # 10. AI GENERATION TELEMETRY & LOG TRACE
 # ---------------------------------------------------------------------------
+
+class ResearchSourceItem(BaseModel):
+    """Real live web source, news article, or community thread ingested during research."""
+    title: str
+    source_name: str
+    url: str
+    domain: str
+    summary_snippet: str
+    published_at: Optional[str] = None
+    credibility_score: float = 0.95
 
 class TraceStep(BaseModel):
     """Step-by-step agentic execution milestone for live traceability."""
@@ -259,6 +270,8 @@ class GenerationTelemetry(BaseModel):
     angle_discovered: str = "contrarian"
     event_trace: List[Dict[str, str]] = Field(default_factory=list)
     trace_steps: List[TraceStep] = Field(default_factory=list)
+    researched_sources: List[ResearchSourceItem] = Field(default_factory=list)
+    extracted_facts: List[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +325,7 @@ class StockSearchItem(BaseModel):
     regular_url: str
     author: Optional[str] = None
     source: str = "unsplash"
+    relevance_score: Optional[float] = None
 
 
 class SceneReorderRequest(BaseModel):

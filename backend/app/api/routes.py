@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 from datetime import datetime
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -487,10 +488,31 @@ async def search_stock_media_endpoint(
     query: str = Query(..., min_length=1),
     orientation: str = Query("portrait"),
     limit: int = Query(8, ge=1, le=20),
+    worker_id: Optional[str] = Query(None),
+    topic: Optional[str] = Query(None),
 ):
-    """Live search across Unsplash 4K photography and local stock library."""
-    items = material_service.search_stock_library(query=query, orientation=orientation, limit=limit)
+    """Live search across Unsplash 4K photography and local stock library with domain-aware negative filtering."""
+    items = material_service.search_stock_library(
+        query=query,
+        orientation=orientation,
+        limit=limit,
+        worker_id=worker_id,
+        topic=topic,
+    )
     return [StockSearchItem(**i) for i in items]
+
+@router.get("/video/stock-suggestions")
+async def get_stock_suggestions_endpoint(
+    topic: str = Query(..., min_length=1),
+    worker_id: Optional[str] = Query(None),
+):
+    """Returns high-affinity stock search suggestion chips tailored to topic domain."""
+    from app.services.visual_intelligence import visual_intelligence
+    domain = visual_intelligence.classify_topic_domain(topic, worker_id=worker_id)
+    return {
+        "domain": domain.value,
+        "suggestions": visual_intelligence.get_ui_suggestions(domain),
+    }
 
 @router.get("/video/stock-materials", response_model=list[StockMaterialItem])
 async def list_stock_materials_endpoint(worker_id: str | None = None):

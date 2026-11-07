@@ -28,14 +28,24 @@ export function StockPickerModal({
   const [selectedAssetUrl, setSelectedAssetUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<{ label: string; query: string; icon: string }[]>([]);
+  const [detectedDomain, setDetectedDomain] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      const q = initialQuery || (keywords.length > 0 ? keywords[0].replace("#", "") : "modern technology");
+      const q = initialQuery || (keywords.length > 0 ? keywords[0].replace("#", "") : "gaming setup neon");
       setQuery(q);
       performSearch(q);
+
+      // Fetch domain-specific suggestions for quick chips
+      api.getStockSuggestions(initialQuery || q, workerId)
+        .then((res) => {
+          setDetectedDomain(res.domain);
+          setSuggestions(res.suggestions || []);
+        })
+        .catch(() => {});
     }
-  }, [isOpen, initialQuery]);
+  }, [isOpen, initialQuery, workerId]);
 
   const performSearch = async (searchTerm: string) => {
     const clean = searchTerm.trim().replace("#", "");
@@ -43,7 +53,7 @@ export function StockPickerModal({
     setIsLoading(true);
     setUploadError(null);
     try {
-      const items = await api.searchStock(clean, "portrait");
+      const items = await api.searchStock(clean, "portrait", workerId, initialQuery);
       setResults(items);
     } catch (err: any) {
       console.warn("Stock search error:", err);
@@ -126,10 +136,34 @@ export function StockPickerModal({
             </button>
           </form>
 
+          {/* Smart Domain Suggestion Chips */}
+          {suggestions.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap font-mono text-[10px]">
+              <span className="text-hive text-[9px] font-bold uppercase tracking-wider flex items-center gap-1">
+                <Sparkles size={11} className="text-hive" />
+                {detectedDomain ? detectedDomain.replace("_", " ").toUpperCase() : "HIGH AFFINITY"}:
+              </span>
+              {suggestions.map((sug, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    setQuery(sug.query);
+                    performSearch(sug.query);
+                  }}
+                  className="rounded-lg border border-hive/30 bg-hive/5 px-2.5 py-0.5 text-gray-200 hover:border-hive hover:bg-hive/15 hover:text-white transition-all text-[10px] flex items-center gap-1 shadow-sm"
+                >
+                  <span>{sug.icon}</span>
+                  <span>{sug.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Keyword suggestion pills */}
           {keywords.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap font-mono text-[10px]">
-              <span className="text-gray-500 text-[9px] uppercase">SUGGESTIONS:</span>
+              <span className="text-gray-500 text-[9px] uppercase">ORIGINAL TAGS:</span>
               {keywords.map((kw, i) => {
                 const cleanKw = kw.replace("#", "").trim();
                 return (
@@ -188,6 +222,13 @@ export function StockPickerModal({
                       <p className="font-mono text-[8px] text-gray-400 truncate">
                         {item.author} • <span className="text-emerald-400 uppercase">{item.source}</span>
                       </p>
+                    </div>
+                    <div className="absolute top-2 left-2 flex items-center gap-1">
+                      {item.relevance_score && (
+                        <span className="rounded bg-black/70 border border-emerald-500/40 px-1.5 py-0.5 text-[8px] font-mono font-bold text-emerald-400 backdrop-blur-xs">
+                          {Math.round(item.relevance_score * 100)}% Match
+                        </span>
+                      )}
                     </div>
                     <div className="absolute top-2 right-2 rounded-full bg-black/60 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Check size={12} className="text-hive" />

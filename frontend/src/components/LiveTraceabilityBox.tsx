@@ -212,7 +212,7 @@ export function LiveTraceabilityBox({
 
                     {/* Optional snippet quote */}
                     {step.snippet && (
-                      <div className="mt-1.5 rounded-lg border border-hive/20 bg-hive/5 p-2 font-mono text-[10px] text-hive-300/90 leading-normal">
+                      <div className="mt-1.5 rounded-lg border border-hive/20 bg-hive/5 p-2 font-mono text-[10px] text-hive-300/90 leading-normal whitespace-pre-wrap select-text">
                         {step.snippet}
                       </div>
                     )}

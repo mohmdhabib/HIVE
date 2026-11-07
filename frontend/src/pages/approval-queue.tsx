@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type TaskReport, type TraceStep } from "@/lib/api";
+import { api, type TaskReport, type TraceStep, type ResearchSourceItem } from "@/lib/api";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -27,6 +27,8 @@ import {
   Video,
   XCircle,
   Zap,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StockPickerModal } from "@/components/StockPickerModal";
@@ -53,7 +55,10 @@ interface TaskMetadata {
     angle_discovered?: string;
     event_trace?: Array<{ timestamp: string; phase: string; message: string }>;
     trace_steps?: TraceStep[];
+    researched_sources?: ResearchSourceItem[];
+    extracted_facts?: string[];
   } | null;
+  researched_sources?: ResearchSourceItem[];
 }
 
 function parseTaskMetadata(task: TaskReport | null): TaskMetadata | null {
@@ -676,6 +681,68 @@ export default function ApprovalQueuePage() {
                       onRetry={activeBlueprintId ? () => handleStartStreamingRegenerateScript(activeBlueprintId) : undefined}
                       defaultExpanded={false}
                     />
+
+                    {/* Researched Web Sources & Live Evidence Pipeline */}
+                    {((activeMeta.telemetry?.researched_sources && activeMeta.telemetry.researched_sources.length > 0) ||
+                      (activeMeta.researched_sources && activeMeta.researched_sources.length > 0)) && (
+                      <div className="rounded-xl border border-hive/30 bg-[#0a0e17] p-3 space-y-2.5 shadow-md">
+                        <div className="flex items-center justify-between border-b border-white/[0.08] pb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="h-5 w-5 rounded bg-hive/15 border border-hive/30 flex items-center justify-center text-hive">
+                              <Globe size={11} />
+                            </div>
+                            <div>
+                              <div className="font-mono text-[10px] font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>AGENTIC WEB SOURCES & FACTUAL GROUNDING</span>
+                                <span className="rounded bg-emerald-500/10 border border-emerald-500/30 px-1 py-0.2 text-[8px] text-emerald-400 font-normal">
+                                  VERIFIED LIVE INTEL
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <span className="font-mono text-[9px] text-hive font-semibold">
+                            {(activeMeta.telemetry?.researched_sources || activeMeta.researched_sources || []).length} SOURCES
+                          </span>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {(activeMeta.telemetry?.researched_sources || activeMeta.researched_sources || []).map((src, i) => (
+                            <a
+                              key={i}
+                              href={src.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group flex flex-col justify-between rounded-lg border border-border/70 bg-surface-deep/80 p-2 hover:border-hive/60 hover:bg-surface-deep transition-all shadow-xs"
+                            >
+                              <div className="space-y-0.5">
+                                <div className="flex items-center justify-between gap-1 text-[9px] font-mono">
+                                  <span className="font-semibold text-hive flex items-center gap-1">
+                                    <ExternalLink size={9} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                                    {src.source_name}
+                                  </span>
+                                  <span className="text-gray-500 text-[8px]">
+                                    {src.domain}
+                                  </span>
+                                </div>
+                                <p className="font-sans text-[11px] font-semibold text-gray-200 group-hover:text-white line-clamp-1 transition-colors">
+                                  {src.title}
+                                </p>
+                                <p className="font-mono text-[9px] text-gray-400 line-clamp-2">
+                                  {src.summary_snippet}
+                                </p>
+                              </div>
+
+                              <div className="mt-1.5 flex items-center justify-between pt-1 border-t border-white/[0.04] font-mono text-[8px] text-gray-500">
+                                <span>{src.published_at || "Recent"}</span>
+                                <span className="text-emerald-400 font-semibold">
+                                  {Math.round(src.credibility_score * 100)}% Credibility
+                                </span>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Controls to toggle Trace Log and Visual Matching Pipeline */}
                     <div className="flex items-center gap-2 pt-1 font-mono text-[10px]">

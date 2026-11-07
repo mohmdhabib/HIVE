@@ -151,6 +151,16 @@ export interface TraceStep {
   timestamp: string;
 }
 
+export interface ResearchSourceItem {
+  title: string;
+  source_name: string;
+  url: string;
+  domain: string;
+  summary_snippet: string;
+  published_at?: string | null;
+  credibility_score: number;
+}
+
 export interface GenerationTelemetry {
   engine_mode: "ollama_llama3.1" | "agentic_nlp_synthesizer";
   model_name: string;
@@ -162,6 +172,8 @@ export interface GenerationTelemetry {
   angle_discovered: string;
   event_trace: Array<{ timestamp: string; phase: string; message: string }>;
   trace_steps?: TraceStep[];
+  researched_sources?: ResearchSourceItem[];
+  extracted_facts?: string[];
 }
 
 export interface VideoProductionBlueprint {
@@ -178,6 +190,7 @@ export interface VideoProductionBlueprint {
   thumbnail: ThumbnailSpec;
   virality_score?: ViralityScorecard | null;
   telemetry?: GenerationTelemetry | null;
+  researched_sources?: ResearchSourceItem[];
   hashtags: string[];
   target_platforms: string[];
   created_at?: string | null;
@@ -227,6 +240,7 @@ export interface StockSearchItem {
   regular_url: string;
   author?: string | null;
   source: string;
+  relevance_score?: number | null;
 }
 
 export interface SceneReorderRequest {
@@ -755,8 +769,17 @@ export const api = {
     const query = worker_id ? `?worker_id=${encodeURIComponent(worker_id)}` : "";
     return request<StockMaterialItem[]>(`/video/stock-materials${query}`);
   },
-  searchStock: (query: string, orientation: string = "portrait") =>
-    request<StockSearchItem[]>(`/video/stock-search?query=${encodeURIComponent(query)}&orientation=${encodeURIComponent(orientation)}`),
+  searchStock: (query: string, orientation: string = "portrait", workerId?: string, topic?: string) => {
+    const params = new URLSearchParams({ query, orientation });
+    if (workerId) params.append("worker_id", workerId);
+    if (topic) params.append("topic", topic);
+    return request<StockSearchItem[]>(`/video/stock-search?${params.toString()}`);
+  },
+  getStockSuggestions: (topic: string, workerId?: string) => {
+    const params = new URLSearchParams({ topic });
+    if (workerId) params.append("worker_id", workerId);
+    return request<{ domain: string; suggestions: { label: string; query: string; icon: string }[] }>(`/video/stock-suggestions?${params.toString()}`);
+  },
   rerollSceneVisual: (blueprintId: string, sceneIdx: number) =>
     request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/scene/${sceneIdx}/reroll`, {
       method: "POST",

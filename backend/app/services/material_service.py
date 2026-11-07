@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 
 from app.core.logging import get_logger
 from app.schemas.video import StockMaterialItem
+from app.services.visual_intelligence import visual_intelligence, SemanticDomain
 
 logger = get_logger("material_service")
 
@@ -52,8 +53,12 @@ class MaterialService:
         access_key: Optional[str] = None,
         orientation: str = "portrait",
         result_idx: int = 0,
+        scene_beat: str = "hook",
+        worker_id: str = "general",
+        topic: Optional[str] = None,
     ) -> Optional[str]:
-        """Queries the Unsplash API for real, ultra-high-definition vertical photography matching keywords with intelligent query relaxation."""
+        """Queries the Unsplash API for real, ultra-high-definition vertical photography matching keywords
+        with domain intelligence, query transmutation, and negative keyword filtering to reject irrelevant assets."""
         key = access_key or os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
         if not key:
             try:
@@ -70,27 +75,32 @@ class MaterialService:
         if not clean_kw:
             return None
 
-        # Build candidate queries: specific visual phrases first, then core entity, then single visual words
-        candidates: List[str] = []
-        if len(clean_kw) >= 2:
-            candidates.append(clean_kw[1])
-        if len(clean_kw) >= 3:
-            candidates.append(clean_kw[2])
-        if len(clean_kw) >= 1:
-            candidates.append(clean_kw[0])
-        # Two-word pair
-        if len(clean_kw) >= 2:
-            candidates.append(f"{clean_kw[0]} {clean_kw[1]}")
-        # Single punchy words
-        for kw in clean_kw:
-            for w in kw.split():
-                if len(w) > 3 and w.lower() not in [c.lower() for c in candidates]:
-                    candidates.append(w)
+        # 1. Classify Semantic Domain
+        domain = visual_intelligence.classify_topic_domain(
+            topic=topic or " ".join(clean_kw),
+            worker_id=worker_id,
+        )
 
-        for candidate in candidates[:4]:
+        # 2. Build candidates: transmuted queries for gaming/tech, plus original clean keywords
+        candidates: List[str] = []
+        if domain in (SemanticDomain.GAMING_ESPORTS, SemanticDomain.AI_TECH, SemanticDomain.BUSINESS_FINANCE):
+            transmuted = visual_intelligence.transmute_search_queries(
+                domain=domain,
+                scene_beat=scene_beat,
+                original_keywords=clean_kw,
+                scene_idx=result_idx,
+            )
+            candidates.extend(transmuted)
+
+        # Also add original clean keywords if not already covered
+        for kw in clean_kw:
+            if kw.lower() not in [c.lower() for c in candidates]:
+                candidates.append(kw)
+
+        for candidate in candidates[:5]:
             try:
                 query = urllib.parse.quote(candidate)
-                url = f"https://api.unsplash.com/search/photos?query={query}&orientation={orientation}&per_page=6"
+                url = f"https://api.unsplash.com/search/photos?query={query}&orientation={orientation}&per_page=8"
                 req = urllib.request.Request(
                     url,
                     headers={"Authorization": f"Client-ID {key}", "User-Agent": "HIVE-VideoEngine/2.0"}
@@ -98,20 +108,45 @@ class MaterialService:
                 with urllib.request.urlopen(req, timeout=3.5) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                     results = data.get("results", [])
-                    if results:
-                        selected_photo = results[result_idx % len(results)]
-                        urls = selected_photo.get("urls", {})
-                        img_url = urls.get("regular") or urls.get("full") or urls.get("small")
-                        if img_url:
-                            photo_id = selected_photo.get("id", "photo")
-                            dest_path = os.path.join(self.downloads_dir, f"unsplash_{photo_id}.jpg")
-                            if not os.path.exists(dest_path):
-                                logger.info("Downloading real Unsplash photo for '%s' (offset=%d): %s", candidate, result_idx, photo_id)
-                                dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-VideoEngine/2.0"})
-                                with urllib.request.urlopen(dl_req, timeout=5.0) as dl_resp:
-                                    with open(dest_path, "wb") as f:
-                                        f.write(dl_resp.read())
-                            return dest_path
+                    if not results:
+                        continue
+
+                    # Filter and score each result against negative terms and domain affinity
+                    valid_photos = []
+                    for photo in results:
+                        is_valid, rel_score, reason = visual_intelligence.validate_photo_relevance(
+                            domain=domain,
+                            photo_meta=photo,
+                            query=candidate,
+                        )
+                        if is_valid:
+                            valid_photos.append((rel_score, photo))
+                        else:
+                            logger.debug("Filtered out Unsplash photo '%s': %s", photo.get("id"), reason)
+
+                    if not valid_photos:
+                        logger.info("All Unsplash results for candidate '%s' failed domain validation; trying next candidate", candidate)
+                        continue
+
+                    # Sort by relevance score descending
+                    valid_photos.sort(key=lambda x: x[0], reverse=True)
+                    selected_photo = valid_photos[result_idx % len(valid_photos)][1]
+
+                    urls = selected_photo.get("urls", {})
+                    img_url = urls.get("regular") or urls.get("full") or urls.get("small")
+                    if img_url:
+                        photo_id = selected_photo.get("id", "photo")
+                        dest_path = os.path.join(self.downloads_dir, f"unsplash_{photo_id}.jpg")
+                        if not os.path.exists(dest_path):
+                            logger.info(
+                                "Downloading verified Unsplash photo for domain '%s' (query='%s', score=%.2f): %s",
+                                domain.value, candidate, valid_photos[0][0], photo_id
+                            )
+                            dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-VideoEngine/2.0"})
+                            with urllib.request.urlopen(dl_req, timeout=5.0) as dl_resp:
+                                with open(dest_path, "wb") as f:
+                                    f.write(dl_resp.read())
+                        return dest_path
             except Exception as e:
                 logger.debug("Unsplash candidate '%s' skipped: %s", candidate, e)
 
@@ -133,10 +168,17 @@ class MaterialService:
         query: str,
         orientation: str = "portrait",
         limit: int = 8,
+        worker_id: Optional[str] = None,
+        topic: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Searches live stock photography via Unsplash and local vault."""
+        """Searches live stock photography via Unsplash and local vault with domain-aware negative filtering."""
         clean_query = query.replace('"', '').replace("'", '').replace("#", "").strip()
         items: List[Dict[str, Any]] = []
+
+        domain = visual_intelligence.classify_topic_domain(
+            topic=topic or clean_query,
+            worker_id=worker_id,
+        )
 
         # 1. Unsplash live search
         key = os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
@@ -149,8 +191,13 @@ class MaterialService:
 
         if key and clean_query:
             try:
-                safe_q = urllib.parse.quote(clean_query)
-                url = f"https://api.unsplash.com/search/photos?query={safe_q}&orientation={orientation}&per_page={limit}"
+                # If query contains brand name like 'fortnite' and domain is gaming, use transmuted query for higher yield
+                effective_q = clean_query
+                if domain == SemanticDomain.GAMING_ESPORTS and any(g in clean_query.lower() for g in ("fortnite", "roblox", "minecraft", "gta")):
+                    effective_q = f"gaming setup {clean_query}"
+
+                safe_q = urllib.parse.quote(effective_q)
+                url = f"https://api.unsplash.com/search/photos?query={safe_q}&orientation={orientation}&per_page={limit * 2}"
                 req = urllib.request.Request(
                     url,
                     headers={"Authorization": f"Client-ID {key}", "User-Agent": "HIVE-VideoEngine/2.0"}
@@ -158,6 +205,15 @@ class MaterialService:
                 with urllib.request.urlopen(req, timeout=4.5) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                     for r in data.get("results", []):
+                        # Validate against negative domain terms
+                        is_valid, rel_score, reason = visual_intelligence.validate_photo_relevance(
+                            domain=domain,
+                            photo_meta=r,
+                            query=effective_q,
+                        )
+                        if not is_valid:
+                            continue
+
                         urls = r.get("urls", {})
                         items.append({
                             "id": r.get("id"),
@@ -166,7 +222,10 @@ class MaterialService:
                             "regular_url": urls.get("regular") or urls.get("full", ""),
                             "author": r.get("user", {}).get("name") or "Unsplash Contributor",
                             "source": "unsplash",
+                            "relevance_score": rel_score,
                         })
+                        if len(items) >= limit:
+                            break
             except Exception as e:
                 logger.debug("Unsplash search error: %s", e)
 
@@ -174,7 +233,15 @@ class MaterialService:
         if os.path.exists(self.stock_images_dir):
             for fname in os.listdir(self.stock_images_dir):
                 if any(ext in fname.lower() for ext in [".jpg", ".png", ".jpeg"]):
-                    if any(w.lower() in fname.lower() for w in clean_query.split()):
+                    name_low = fname.lower()
+                    matches = False
+                    # Check token match or gaming domain match
+                    if domain == SemanticDomain.GAMING_ESPORTS and "gaming" in name_low:
+                        matches = True
+                    elif any(w.lower() in name_low for w in clean_query.split()):
+                        matches = True
+
+                    if matches:
                         full_p = os.path.join(self.stock_images_dir, fname)
                         items.append({
                             "id": f"local-{fname}",
@@ -183,6 +250,7 @@ class MaterialService:
                             "regular_url": full_p,
                             "author": "HIVE Stock Vault",
                             "source": "local_bank",
+                            "relevance_score": 0.95,
                         })
 
         return items
@@ -390,7 +458,12 @@ class MaterialService:
                 logger.debug("Vault lookup skipped: %s", e)
 
         # Tier 1: Real Unsplash Stock Photography API (Priority 1)
-        unsplash_img = self.fetch_unsplash_stock_photo(keywords=keywords, result_idx=result_offset)
+        unsplash_img = self.fetch_unsplash_stock_photo(
+            keywords=keywords,
+            result_idx=result_offset,
+            scene_beat=scene_type,
+            worker_id=worker_id,
+        )
         if unsplash_img and os.path.exists(unsplash_img):
             if self.convert_image_to_motion_video(unsplash_img, duration_sec, output_path, motion_type=effective_motion):
                 logger.info("Using real Unsplash HD stock photo with %s motion: %s", effective_motion, unsplash_img)
@@ -592,8 +665,8 @@ class MaterialService:
         worker_id: str = "tech",
         scene_idx: int = 0,
     ) -> Tuple[str, str]:
-        """Intelligently matches local curated stock footage or photos from disk using keyword relevance,
-        worker niche affinity, and scene rotation to prevent asset repetition."""
+        """Intelligently matches local curated stock footage or photos from disk using domain classification,
+        semantic keyword relevance, worker niche affinity, and scene rotation to guarantee accurate asset alignment."""
         available_files = []
         if os.path.exists(self.stock_images_dir):
             for f in sorted(os.listdir(self.stock_images_dir)):
@@ -608,6 +681,9 @@ class MaterialService:
         if not available_files:
             return "tech_coding.jpg", "image"
 
+        # 1. Classify Semantic Domain
+        domain = visual_intelligence.classify_topic_domain(" ".join(keywords), worker_id=worker_id)
+
         # Normalize keywords and niche
         clean_tokens = set()
         for kw in keywords:
@@ -617,15 +693,20 @@ class MaterialService:
                     clean_tokens.add(token)
 
         worker_tokens = {worker_id.lower()}
+        if domain == SemanticDomain.GAMING_ESPORTS or worker_id.lower() in ("entertainment", "culture"):
+            worker_tokens.update([
+                "gaming", "game", "esports", "controller", "streamer", "cyber", "arena",
+                "battlestation", "rig", "pc", "console", "rgb", "keyboard", "arcade", "headset"
+            ])
         if worker_id.lower() in ("lifestyle", "fashion"):
             worker_tokens.update(["fashion", "style", "luxury", "couture", "streetwear", "accessories", "runway", "model", "outfit"])
-        elif worker_id.lower() in ("tech", "technology"):
+        elif worker_id.lower() in ("tech", "technology") or domain == SemanticDomain.AI_TECH:
             worker_tokens.update(["code", "coding", "software", "programmer", "server", "cyber", "ai", "data"])
-        elif worker_id.lower() in ("business", "finance"):
+        elif worker_id.lower() in ("business", "finance") or domain == SemanticDomain.BUSINESS_FINANCE:
             worker_tokens.update(["chart", "meeting", "office", "startup", "money", "growth"])
-        elif worker_id.lower() in ("entertainment", "culture"):
+        elif worker_id.lower() in ("entertainment", "culture") and domain != SemanticDomain.GAMING_ESPORTS:
             worker_tokens.update(["cinema", "music", "concert", "stage", "movie", "film"])
-        elif worker_id.lower() in ("curiosity", "education"):
+        elif worker_id.lower() in ("curiosity", "education") or domain == SemanticDomain.CURIOSITY_SCIENCE:
             worker_tokens.update(["library", "science", "space", "nebula", "book", "galaxy"])
 
         scored = []
@@ -641,6 +722,16 @@ class MaterialService:
                 if wt in name_lower:
                     score += 5
 
+            # Strong domain anchoring bonuses
+            if domain == SemanticDomain.GAMING_ESPORTS and "gaming" in name_lower:
+                score += 35
+            elif domain == SemanticDomain.AI_TECH and any(k in name_lower for k in ("tech", "code", "server", "programmer")):
+                score += 25
+            elif domain == SemanticDomain.BUSINESS_FINANCE and any(k in name_lower for k in ("finance", "chart", "business")):
+                score += 25
+            elif domain == SemanticDomain.LIFESTYLE_FASHION and "fashion" in name_lower:
+                score += 25
+
             scored.append((score, fname, full_path))
 
         # Filter to those with score > 0
@@ -650,7 +741,23 @@ class MaterialService:
             chosen = positive_matches[scene_idx % len(positive_matches)]
             chosen_fname = chosen[1]
         else:
-            chosen_fname = available_files[scene_idx % len(available_files)][0]
+            # Fallback must respect domain, never pick random unrelated files
+            domain_specific = []
+            if domain == SemanticDomain.GAMING_ESPORTS:
+                domain_specific = [f for f in available_files if "gaming" in f[0].lower()]
+            elif domain == SemanticDomain.AI_TECH:
+                domain_specific = [f for f in available_files if any(k in f[0].lower() for k in ("tech", "code", "server", "programmer"))]
+            elif domain == SemanticDomain.BUSINESS_FINANCE:
+                domain_specific = [f for f in available_files if any(k in f[0].lower() for k in ("finance", "chart", "business"))]
+            elif domain == SemanticDomain.LIFESTYLE_FASHION:
+                domain_specific = [f for f in available_files if "fashion" in f[0].lower()]
+            elif domain == SemanticDomain.ENTERTAINMENT_CINEMA:
+                domain_specific = [f for f in available_files if any(k in f[0].lower() for k in ("entertainment", "concert", "cinema"))]
+
+            if domain_specific:
+                chosen_fname = domain_specific[scene_idx % len(domain_specific)][0]
+            else:
+                chosen_fname = available_files[scene_idx % len(available_files)][0]
 
         is_video = chosen_fname.lower().endswith(".mp4")
         return chosen_fname, "video" if is_video else "image"
