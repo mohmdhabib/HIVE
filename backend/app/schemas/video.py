@@ -222,6 +222,9 @@ class VideoProductionBlueprint(BaseModel):
     
     # Quality prediction
     virality_score: Optional[ViralityScorecard] = None
+
+    # AI Engine & Agent Telemetry Trace
+    telemetry: Optional["GenerationTelemetry"] = None
     
     # Metadata
     hashtags: List[str] = Field(default_factory=list)
@@ -231,7 +234,23 @@ class VideoProductionBlueprint(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# 10. SCENE CLIPS & RENDER JOB STATUS
+# 10. AI GENERATION TELEMETRY & LOG TRACE
+# ---------------------------------------------------------------------------
+
+class GenerationTelemetry(BaseModel):
+    engine_mode: Literal["ollama_llama3.1", "agentic_nlp_synthesizer"] = "agentic_nlp_synthesizer"
+    model_name: str = "llama3.1:latest"
+    research_latency_seconds: float = 0.0
+    screenplay_archetype: str = "contrarian_paradox"
+    llm_connected: bool = True
+    llm_error_reason: Optional[str] = None
+    target_audience: str = "general"
+    angle_discovered: str = "contrarian"
+    event_trace: List[Dict[str, str]] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# 11. SCENE CLIPS & RENDER JOB STATUS
 # ---------------------------------------------------------------------------
 
 class SceneClipArtifact(BaseModel):
@@ -248,6 +267,9 @@ class SceneClipArtifact(BaseModel):
     camera_motion: str
     search_keywords: List[str] = Field(default_factory=list)
     source_asset: Optional[str] = None
+    resolved_footage_type: Optional[str] = None
+    resolved_footage_query: Optional[str] = None
+    status: str = "ready"
     status: Literal["ready", "rendering", "failed"] = "ready"
 
 
@@ -310,5 +332,7 @@ class RenderJobStatus(BaseModel):
     duration_seconds: Optional[float] = None
     file_size_mb: Optional[float] = None
     scene_clips: List[SceneClipArtifact] = Field(default_factory=list)
+
+VideoProductionBlueprint.model_rebuild()
 
 

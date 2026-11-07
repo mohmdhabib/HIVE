@@ -140,6 +140,18 @@ export interface ViralityScorecard {
   recommendation: string;
 }
 
+export interface GenerationTelemetry {
+  engine_mode: "ollama_llama3.1" | "agentic_nlp_synthesizer";
+  model_name: string;
+  research_latency_seconds: number;
+  screenplay_archetype: string;
+  llm_connected: boolean;
+  llm_error_reason?: string | null;
+  target_audience: string;
+  angle_discovered: string;
+  event_trace: Array<{ timestamp: string; phase: string; message: string }>;
+}
+
 export interface VideoProductionBlueprint {
   blueprint_id: string;
   worker_id: string;
@@ -153,6 +165,7 @@ export interface VideoProductionBlueprint {
   selected_hook_variant: string;
   thumbnail: ThumbnailSpec;
   virality_score?: ViralityScorecard | null;
+  telemetry?: GenerationTelemetry | null;
   hashtags: string[];
   target_platforms: string[];
   created_at?: string | null;
@@ -171,6 +184,8 @@ export interface SceneClipArtifact {
   camera_motion: string;
   search_keywords: string[];
   source_asset?: string | null;
+  resolved_footage_type?: string | null;
+  resolved_footage_query?: string | null;
   status: "ready" | "rendering" | "failed";
 }
 
@@ -265,6 +280,50 @@ export interface VaultAsset {
   height: number;
   source: string;
   created_at: string;
+}
+
+export interface HarvestedBlueprintDraft {
+  draft_id: string;
+  worker_id: string;
+  worker_name: string;
+  trend_title: string;
+  source: string;
+  virality_score: number;
+  recommendation: string;
+  hook_preview: string;
+  blueprint_id: string;
+  task_id: string;
+  status: string;
+  scenes_count: number;
+  duration_seconds: number;
+  created_at: string;
+}
+
+export interface BatchHarvestReport {
+  batch_id: string;
+  timestamp: string;
+  total_signals_scanned: number;
+  total_drafts_generated: number;
+  workers_covered: string[];
+  drafts: HarvestedBlueprintDraft[];
+  status: string;
+  execution_time_seconds: number;
+}
+
+export interface HarvesterStatus {
+  status: "idle" | "running";
+  schedule: {
+    enabled: boolean;
+    cron_expression: string;
+    drafts_per_worker: number;
+    last_run: string | null;
+    next_run: string | null;
+    last_batch_id: string | null;
+    total_runs: number;
+  };
+  queued_drafts_count: number;
+  recent_batches_count: number;
+  last_batch: BatchHarvestReport | null;
 }
 
 export interface WorkerPerformanceDigest {
@@ -665,6 +724,10 @@ export const api = {
     request<SceneClipArtifact[]>(`/video/blueprint/${encodeURIComponent(blueprintId)}/clips`),
   getBlueprint: (blueprintId: string) =>
     request<VideoProductionBlueprint>(`/video/blueprint/${encodeURIComponent(blueprintId)}`),
+  renderBlueprintById: (blueprintId: string) =>
+    request<RenderJobStatus>(`/video/blueprint/${encodeURIComponent(blueprintId)}/render`, {
+      method: "POST",
+    }),
   stockMaterials: (worker_id?: string) => {
     const query = worker_id ? `?worker_id=${encodeURIComponent(worker_id)}` : "";
     return request<StockMaterialItem[]>(`/video/stock-materials${query}`);
@@ -711,4 +774,15 @@ export const api = {
     });
   },
   sfxCatalog: () => request<SFXCatalogItem[]>("/video/sfx-catalog"),
+  runAutonomousBatchHarvest: (data?: { worker_ids?: string[]; drafts_per_worker?: number; min_virality_score?: number }) =>
+    request<BatchHarvestReport>("/trends/harvest-batch", {
+      method: "POST",
+      body: JSON.stringify(data || {}),
+    }),
+  getHarvesterStatus: () => request<HarvesterStatus>("/trends/harvest-batch/status"),
+  updateHarvesterSchedule: (data: { enabled: boolean; cron_expression?: string; drafts_per_worker?: number }) =>
+    request<HarvesterStatus["schedule"]>("/trends/harvest-batch/schedule", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

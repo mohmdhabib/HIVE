@@ -32,11 +32,17 @@ class LLMService:
             self._semaphore = asyncio.Semaphore(self._max_concurrent)
         return self._semaphore
 
-    async def generate(self, prompt: str, temperature: float = 0.4, system: str | None = None) -> str:
-        """Call Ollama for unstructured text generation under concurrency control."""
+    async def generate(
+        self,
+        prompt: str,
+        temperature: float = 0.4,
+        system: str | None = None,
+        format: str | None = None,
+    ) -> str:
+        """Call Ollama for text generation with optional JSON format constraint under concurrency control."""
         async with self.semaphore:
-            logger.info("LLM text request started (model=%s, prompt_len=%d)", self.model, len(prompt))
-            timeout = httpx.Timeout(self.timeout, connect=10.0)
+            logger.info("LLM text request started (model=%s, prompt_len=%d, format=%s)", self.model, len(prompt), format)
+            timeout = httpx.Timeout(self.timeout, connect=1.5)
             payload = {
                 "model": self.model,
                 "prompt": prompt,
@@ -45,6 +51,8 @@ class LLMService:
             }
             if system:
                 payload["system"] = system
+            if format:
+                payload["format"] = format
 
             try:
                 async with httpx.AsyncClient(timeout=timeout) as client:
@@ -80,7 +88,7 @@ class LLMService:
 
         async with self.semaphore:
             logger.info("LLM structured request started (model=%s, schema=%s)", self.model, schema.__name__)
-            timeout = httpx.Timeout(self.timeout, connect=10.0)
+            timeout = httpx.Timeout(self.timeout, connect=1.5)
             payload = {
                 "model": self.model,
                 "prompt": prompt,

@@ -501,7 +501,7 @@ class VideoRenderService:
                 scene.duration_seconds = duration
 
                 # Step C: Obtain real stock video, niche background loop, or kinetic motion footage matching exact duration
-                material_service.get_scene_footage(
+                _, footage_type, source_desc = material_service.get_scene_footage_detailed(
                     keywords=scene.visual.search_keywords,
                     worker_id=blueprint.worker_id,
                     scene_type=scene.emotional_beat.value,
@@ -603,7 +603,9 @@ class VideoRenderService:
                     voiceover_text=scene.audio.voiceover_text,
                     camera_motion=scene.visual.camera_motion,
                     search_keywords=scene.visual.search_keywords,
-                    source_asset=scene.visual.description,
+                    source_asset=source_desc,
+                    resolved_footage_type=footage_type,
+                    resolved_footage_query=", ".join(scene.visual.search_keywords),
                     status="ready",
                 )
                 job.scene_clips.append(clip_artifact)
@@ -663,6 +665,25 @@ class VideoRenderService:
             job.file_size_mb = size_mb
 
             logger.info("Video successfully rendered! Output: %s (%.2f MB, %.1fs, %d scene clips)", final_mp4, size_mb, total_duration, len(job.scene_clips))
+
+            # Automatically update TaskReport in task_store if queued for human review
+            try:
+                from app.services.task_store import task_store
+                task_id = f"task-{blueprint.blueprint_id}"
+                task = task_store.get_task(task_id)
+                if task:
+                    meta = {}
+                    try:
+                        if task.output:
+                            meta = json.loads(task.output)
+                    except Exception:
+                        pass
+                    meta["video_url"] = job.output_path
+                    meta["rendered_at"] = datetime.now(timezone.utc).isoformat()
+                    task.output = json.dumps(meta)
+                    task_store.save_task(task)
+            except Exception as task_err:
+                logger.debug("Failed updating task_store with rendered video: %s", task_err)
 
         except Exception as e:
             logger.exception("Video rendering failed for blueprint '%s'", blueprint.blueprint_id)
@@ -1009,6 +1030,8 @@ class VideoRenderService:
             scale_w, scale_h = 1920, 1080
         vf_base = f"scale={scale_w}:{scale_h}:force_original_aspect_ratio=increase,crop={scale_w}:{scale_h},setsar=1{filter_clause}"
 
+        footage_type = "custom_vault_asset" if update.custom_asset_path else "stock"
+        source_desc = os.path.basename(update.custom_asset_path) if update.custom_asset_path else scene.visual.description
         if update.custom_asset_path and os.path.exists(update.custom_asset_path):
             if update.custom_asset_path.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
                 material_service.convert_image_to_motion_video(
@@ -1030,7 +1053,7 @@ class VideoRenderService:
                 ]
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         else:
-            material_service.get_scene_footage(
+            _, footage_type, source_desc = material_service.get_scene_footage_detailed(
                 keywords=scene.visual.search_keywords,
                 worker_id=blueprint.worker_id,
                 scene_type=scene.emotional_beat.value,
@@ -1146,7 +1169,9 @@ class VideoRenderService:
             voiceover_text=scene.audio.voiceover_text,
             camera_motion=scene.visual.camera_motion,
             search_keywords=scene.visual.search_keywords,
-            source_asset=scene.visual.description,
+            source_asset=source_desc,
+            resolved_footage_type=footage_type,
+            resolved_footage_query=", ".join(scene.visual.search_keywords),
             status="ready",
         )
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   api,
@@ -48,6 +49,8 @@ import {
   Sliders,
   Sparkles,
   Target,
+  Cpu,
+  Terminal,
   Trash2,
   TrendingUp,
   Type,
@@ -151,11 +154,25 @@ const TRENDING_INSPIRATIONS = [
 
 export default function VideoStudioPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const blueprintIdParam = searchParams.get("blueprintId");
+  const [isBatchDrawerOpen, setIsBatchDrawerOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const { data: workers = [] } = useWorkers();
   const { selectedWorkerId, setSelectedWorker, preloadedTrend, setPreloadedTrend } = useAppStore();
   const [trendTitle, setTrendTitle] = useState("");
   const [trendSummary, setTrendSummary] = useState("");
+
+  // Autonomous Batch Queued Drafts Query
+  const { data: pendingTasks = [] } = useQuery({
+    queryKey: ["pending-tasks"],
+    queryFn: () => api.listTasks({ status: "needs_approval" }),
+    refetchInterval: 12_000,
+  });
+
+  const autonomousDrafts = pendingTasks.filter((t) =>
+    t.objective.includes("[Daily Autonomous Draft]")
+  );
 
   useEffect(() => {
     if (preloadedTrend) {
@@ -166,8 +183,34 @@ export default function VideoStudioPage() {
       setPreloadedTrend(null);
     }
   }, [preloadedTrend, setPreloadedTrend]);
+
   const [blueprint, setBlueprint] = useState<VideoProductionBlueprint | null>(null);
-  const [activePanel, setActivePanel] = useState<"scenes" | "hooks" | "brand" | "thumbnail" | "score" | "player" | "vault">("scenes");
+
+  // Auto-load blueprint from URL search parameter
+  useEffect(() => {
+    if (!blueprintIdParam) return;
+    if (blueprint?.blueprint_id === blueprintIdParam) return;
+
+    let isMounted = true;
+    api.getBlueprint(blueprintIdParam)
+      .then((bp) => {
+        if (!isMounted) return;
+        setBlueprint(bp);
+        setSelectedWorker(bp.worker_id);
+        if (bp.scenes && bp.scenes.length > 0) {
+          setSelectedSceneId(bp.scenes[0].scene_id);
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not load blueprint from URL param:", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [blueprintIdParam, blueprint?.blueprint_id, setSelectedWorker]);
+
+  const [activePanel, setActivePanel] = useState<"scenes" | "hooks" | "brand" | "thumbnail" | "score" | "player" | "vault" | "inspector">("scenes");
   const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
   const [renderJob, setRenderJob] = useState<RenderJobStatus | null>(null);
   const [dispatchedApproval, setDispatchedApproval] = useState(false);
@@ -509,6 +552,113 @@ export default function VideoStudioPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Autonomous Batch Drafts Drawer Button */}
+          <div className="relative">
+            <button
+              onClick={() => setIsBatchDrawerOpen(!isBatchDrawerOpen)}
+              className={cn(
+                "flex items-center gap-2 rounded-xl border px-3.5 py-2 font-mono text-xs transition-all shadow-sm",
+                autonomousDrafts.length > 0
+                  ? "border-amber-500/40 bg-gradient-to-r from-amber-500/20 to-hive/10 text-amber-300 hover:border-amber-400"
+                  : "border-white/[0.08] bg-surface-deep/80 text-gray-300 hover:border-white/20"
+              )}
+            >
+              <Flame size={14} className={autonomousDrafts.length > 0 ? "text-amber-400 animate-pulse" : "text-gray-400"} />
+              <span className="font-semibold">BATCH DRAFTS</span>
+              <span className="rounded bg-black/40 px-1.5 py-0.2 font-mono text-[10px] text-hive font-bold">
+                {autonomousDrafts.length}
+              </span>
+            </button>
+
+            {/* Dropdown Drawer */}
+            {isBatchDrawerOpen && (
+              <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-xl border border-border bg-[#0e131d] p-3 shadow-2xl z-50 space-y-2 backdrop-blur-2xl">
+                <div className="flex items-center justify-between border-b border-border/80 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Flame size={13} className="text-amber-400" />
+                    <span className="font-mono text-xs font-bold text-gray-100">
+                      AUTONOMOUS MORNING DRAFTS ({autonomousDrafts.length})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setIsBatchDrawerOpen(false)}
+                    className="text-gray-400 hover:text-white text-xs"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+                  {autonomousDrafts.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-gray-400">
+                      No morning drafts queued.
+                    </div>
+                  ) : (
+                    autonomousDrafts.map((draft) => {
+                      let meta: { blueprint_id?: string; virality_score?: number } | null = null;
+                      try {
+                        if (draft.output?.startsWith("{")) meta = JSON.parse(draft.output);
+                      } catch {}
+                      const bpId = meta?.blueprint_id || draft.task_id.replace(/^task-/, "");
+                      const isCurrent = blueprint?.blueprint_id === bpId;
+
+                      return (
+                        <button
+                          key={draft.task_id}
+                          onClick={async () => {
+                            try {
+                              const bp = await api.getBlueprint(bpId);
+                              setBlueprint(bp);
+                              setSelectedWorker(bp.worker_id);
+                              if (bp.scenes?.length) setSelectedSceneId(bp.scenes[0].scene_id);
+                              setSearchParams({ blueprintId: bpId });
+                              setIsBatchDrawerOpen(false);
+                            } catch (e) {
+                              console.error("Failed loading draft blueprint", e);
+                            }
+                          }}
+                          className={cn(
+                            "w-full text-left rounded-lg p-2.5 transition-all border text-xs flex flex-col gap-1",
+                            isCurrent
+                              ? "border-hive bg-hive/10 text-white"
+                              : "border-border/60 bg-surface/60 hover:bg-surface-raised hover:border-border text-gray-300"
+                          )}
+                        >
+                          <div className="flex items-center justify-between font-mono text-[9px]">
+                            <span className="text-hive font-semibold uppercase">{draft.worker_name}</span>
+                            {meta?.virality_score && (
+                              <span className="text-amber-400 font-bold">🔥 {meta.virality_score}/100</span>
+                            )}
+                          </div>
+                          <div className="font-medium line-clamp-1 text-gray-200">
+                            {draft.content?.title || draft.objective.replace("[Daily Autonomous Draft] ", "")}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="border-t border-border/80 pt-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await api.runAutonomousBatchHarvest({ drafts_per_worker: 3 });
+                        queryClient.invalidateQueries({ queryKey: ["pending-tasks"] });
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-hive/20 border border-hive/40 px-3 py-1.5 font-mono text-[10px] font-semibold text-hive hover:bg-hive/30 transition-colors"
+                  >
+                    <Zap size={12} />
+                    <span>⚡ TRIGGER 15 NEW DRAFTS</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-surface-deep/80 px-3.5 py-2 font-mono text-xs shadow-inner">
             <Clapperboard size={14} className="text-hive" />
             <span className="text-gray-300 font-semibold">STUDIO GRADE</span>
@@ -830,6 +980,7 @@ export default function VideoStudioPage() {
             {[
               { id: "scenes" as const, label: "SCENE GRAPH", icon: Film },
               { id: "player" as const, label: renderJob?.output_path ? "★ VIDEO PLAYER" : "VIDEO PLAYER", icon: Play },
+              { id: "inspector" as const, label: "🔬 AI INSPECTOR & TRACE", icon: Sparkles },
               { id: "hooks" as const, label: "A/B HOOKS", icon: Zap },
               { id: "brand" as const, label: "BRAND IDENTITY", icon: Palette },
               { id: "thumbnail" as const, label: "THUMBNAIL", icon: ImageIcon },
@@ -1076,6 +1227,168 @@ export default function VideoStudioPage() {
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* AI ENGINE INSPECTOR & REAL-TIME OBSERVABILITY PANEL */}
+          {activePanel === "inspector" && (
+            <div className="rounded-xl border border-border bg-surface p-6 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-hive" />
+                  <div>
+                    <h3 className="font-display text-base font-semibold">AI Script Engine & Observability Inspector</h3>
+                    <p className="text-xs text-gray-400">
+                      Real-time generation telemetry, agentic screenplay research, and stock footage resolution pipeline.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 font-mono text-[10px]">
+                  {blueprint?.telemetry?.engine_mode === "ollama_llama3.1" ? (
+                    <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-emerald-400 font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                      OLLAMA LLAMA 3.1 ({blueprint.telemetry.research_latency_seconds}s)
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-amber-300 font-semibold">
+                      <span className="h-2 w-2 rounded-full bg-amber-400" />
+                      AGENTIC DYNAMIC NLP SYNTHESIZER
+                    </span>
+                  )}
+                  <span className="rounded bg-surface-deep border border-border px-2.5 py-1 text-gray-300 uppercase">
+                    ARCHETYPE: {blueprint?.telemetry?.screenplay_archetype || "CONTRARIAN PARADOX"}
+                  </span>
+                </div>
+              </div>
+
+              {blueprint?.telemetry?.llm_error_reason && (
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3.5 text-xs text-amber-300 font-mono">
+                  💡 Notice: {blueprint.telemetry.llm_error_reason}. To enable direct 8B local neural generation, run <code className="bg-black/40 px-1.5 py-0.5 rounded text-white font-bold">ollama serve</code> in your terminal.
+                </div>
+              )}
+
+              {/* Grid 1: Research Strategy & Entity Breakdown */}
+              <div className="grid gap-4 md:grid-cols-3 font-mono text-xs">
+                <div className="rounded-xl border border-border bg-surface-deep p-4 space-y-1.5">
+                  <span className="text-[10px] text-gray-500 block">TARGET AUDIENCE</span>
+                  <span className="text-gray-100 font-bold font-sans text-sm block">{blueprint?.telemetry?.target_audience || activeWorker.audience}</span>
+                  <span className="text-[10px] text-hive">Brand Voice: {activeWorker.voice}</span>
+                </div>
+                <div className="rounded-xl border border-border bg-surface-deep p-4 space-y-1.5">
+                  <span className="text-[10px] text-gray-500 block">NARRATIVE ARCHETYPE</span>
+                  <span className="text-gray-100 font-bold capitalize font-sans text-sm block">
+                    {(blueprint?.telemetry?.screenplay_archetype || "contrarian_paradox").replace(/_/g, " ")}
+                  </span>
+                  <span className="text-[10px] text-emerald-400">Hook Formula: 3-Second Scroll Stopper</span>
+                </div>
+                <div className="rounded-xl border border-border bg-surface-deep p-4 space-y-1.5">
+                  <span className="text-[10px] text-gray-500 block">GENERATION LATENCY</span>
+                  <span className="text-gray-100 font-bold font-sans text-sm block">
+                    {blueprint?.telemetry?.research_latency_seconds ? `${blueprint.telemetry.research_latency_seconds} seconds` : "Instantaneous"}
+                  </span>
+                  <span className="text-[10px] text-gray-400">Total Scenes: {blueprint?.scenes.length || 8} Scenes</span>
+                </div>
+              </div>
+
+              {/* Grid 2: Real-time Backend Event Trace Log */}
+              <div className="rounded-xl border border-border bg-black/90 p-4 space-y-2">
+                <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                  <div className="flex items-center gap-2 font-mono text-xs font-semibold text-gray-300">
+                    <Terminal size={14} className="text-hive" />
+                    <span>BACKEND AGENT EXECUTION TRACE</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-gray-500">
+                    {blueprint?.telemetry?.event_trace?.length || 0} EVENTS RECORDED
+                  </span>
+                </div>
+
+                <div className="space-y-1 font-mono text-xs max-h-48 overflow-y-auto pr-1">
+                  {blueprint?.telemetry?.event_trace && blueprint.telemetry.event_trace.length > 0 ? (
+                    blueprint.telemetry.event_trace.map((ev, i) => (
+                      <div key={i} className="flex items-start gap-2.5 text-gray-300 leading-relaxed text-[11px]">
+                        <span className="text-gray-500 shrink-0">[{ev.timestamp}]</span>
+                        <span className="text-hive font-semibold shrink-0">[{ev.phase}]</span>
+                        <span className="text-gray-200">{ev.message}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-3 text-gray-500 italic text-[11px]">
+                      [00:00.000] [AGENT] Screenplay graph constructed. All 8 retention zones calibrated.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Grid 3: Scene-by-Scene Visual Matching Pipeline */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-mono text-xs font-bold text-gray-200 uppercase tracking-wider">
+                    SCENE-BY-SCENE VISUAL ASSET RESOLUTION PIPELINE
+                  </h4>
+                  <span className="font-mono text-[10px] text-gray-400">
+                    Showing {blueprint?.scenes.length || 0} Scenes
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {blueprint?.scenes.map((scene, idx) => {
+                    const clip = activeClips.find((c) => c.scene_idx === idx);
+                    return (
+                      <div
+                        key={scene.scene_id}
+                        className="rounded-xl border border-border/80 bg-surface-deep/80 p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="space-y-1 max-w-2xl">
+                          <div className="flex items-center gap-2 font-mono text-[10px]">
+                            <span className="rounded bg-hive/20 border border-hive/40 px-2 py-0.5 text-hive font-bold uppercase">
+                              SCENE {idx + 1}: {scene.emotional_beat}
+                            </span>
+                            <span className="text-gray-500">•</span>
+                            <span className="text-emerald-400 font-semibold">
+                              {clip?.resolved_footage_type || "Stock Footage Search"}
+                            </span>
+                            <span className="text-gray-500">•</span>
+                            <span className="text-gray-400">Motion: {scene.visual.camera_motion}</span>
+                            {scene.audio.sfx_cue && (
+                              <>
+                                <span className="text-gray-500">•</span>
+                                <span className="text-amber-400">SFX: {scene.audio.sfx_cue}</span>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="text-gray-200 italic font-sans text-xs">
+                            "{scene.audio.voiceover_text}"
+                          </div>
+
+                          <div className="font-mono text-[9px] text-gray-400 flex flex-wrap gap-1 items-center pt-0.5">
+                            <span>Keywords Searched:</span>
+                            {scene.visual.search_keywords.map((kw, ki) => (
+                              <span key={ki} className="rounded bg-surface px-1.5 py-0.5 border border-border text-hive">
+                                #{kw}
+                              </span>
+                            ))}
+                            {clip?.source_asset && (
+                              <span className="text-gray-400 pl-2">| Asset: <strong className="text-gray-300">{clip.source_asset}</strong></span>
+                            )}
+                          </div>
+                        </div>
+
+                        {clip?.thumbnail_path && (
+                          <div className="shrink-0 flex items-center gap-2">
+                            <img
+                              src={clip.thumbnail_path}
+                              alt={`Scene ${idx+1}`}
+                              className="h-14 w-10 object-cover rounded-lg border border-border shadow-md"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 

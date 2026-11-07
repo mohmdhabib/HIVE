@@ -45,3 +45,47 @@ class NicheTrendDigest(BaseModel):
     trends: List[LiveTrendItem]
     opportunities: List[AnalyzedTrendOpportunity]
 
+
+class BatchHarvestRequest(BaseModel):
+    worker_ids: Optional[List[str]] = None
+    drafts_per_worker: int = Field(default=3, ge=1, le=5)
+    min_virality_score: int = Field(default=65, ge=1, le=100)
+
+
+class HarvestedBlueprintDraft(BaseModel):
+    draft_id: str
+    worker_id: str
+    worker_name: str
+    trend_title: str
+    source: str
+    virality_score: int
+    recommendation: str
+    hook_preview: str
+    blueprint_id: str
+    task_id: str
+    status: str = "needs_approval"
+    scenes_count: int
+    duration_seconds: float
+    created_at: str
+
+
+class BatchHarvestReport(BaseModel):
+    batch_id: str
+    timestamp: str
+    total_signals_scanned: int
+    total_drafts_generated: int
+    workers_covered: List[str]
+    drafts: List[HarvestedBlueprintDraft]
+    status: str = "completed"
+    execution_time_seconds: float
+
+
+class HarvesterScheduleConfig(BaseModel):
+    enabled: bool = True
+    cron_expression: str = "0 6 * * *"
+    drafts_per_worker: int = 3
+    last_run: Optional[str] = None
+    next_run: Optional[str] = None
+    last_batch_id: Optional[str] = None
+    total_runs: int = 0
+

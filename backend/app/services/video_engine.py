@@ -48,10 +48,12 @@ from app.schemas.video import (
     ExportFormat,
     ViralityScorecard,
     RenderJobStatus,
+    GenerationTelemetry,
 )
 from app.schemas.trend import AnalyzedTrendOpportunity
 from app.workers.registry import get_worker
 from app.services.llm import LLMService
+from app.services.script_director import script_director_agent
 from app.core.logging import get_logger
 
 logger = get_logger("video_engine")
@@ -557,54 +559,89 @@ class VideoIntelligenceEngine:
         source_trend_id: Optional[str] = None,
         llm: Optional[LLMService] = None,
     ) -> VideoProductionBlueprint:
-        """Generate a complete video production blueprint from a trending topic."""
-        
+        """Generate a complete video production blueprint from a trending topic with agentic scriptwriting."""
         worker = get_worker(worker_id)
-        hook_text = f"Stop scrolling. {trend_title.split(':')[0][:30]} just changed the game."
-        cta_text = f"Follow for more {worker.niche} breakdowns that actually matter."
-        description = trend_summary or f"Deep dive into {trend_title}"
-        body_points: List[str] = []
+        brand = BRAND_IDENTITIES.get(worker_id, BRAND_IDENTITIES["business"])
 
-        if llm is not None:
+        # Auto-resolve LLM service if not explicitly passed
+        active_llm = llm
+        if active_llm is None:
             try:
-                script_result = await asyncio.wait_for(
-                    self._generate_script_with_llm(llm, worker, trend_title, trend_summary),
-                    timeout=3.0,
-                )
-                if script_result:
-                    hook_text = script_result.get("hook", hook_text)
-                    body_points = script_result.get("body_points", [])
-                    cta_text = script_result.get("cta", cta_text)
-                    description = script_result.get("description", description)
-            except Exception as e:
-                logger.warning("LLM script generation failed or timed out, using heuristic: %s", e)
+                from app.dependencies import get_llm_service
+                active_llm = get_llm_service()
+            except Exception as ex:
+                logger.debug("Could not resolve default LLM service: %s", ex)
 
-        if not body_points:
-            body_points = [
-                f"First, let's break down what {trend_title.split()[0]} actually means for {worker.audience}.",
-                f"The data shows a pattern that most people in {worker.niche} are completely missing.",
-                f"Here's the part nobody is talking about — and it directly affects your bottom line.",
-                f"Companies like this are already adapting. If you're not paying attention, you're falling behind.",
-            ]
-
-        blueprint = self.assemble_blueprint(
-            worker_id=worker_id,
+        # 1. Agentic Screenplay Crafting & Research
+        scenes, hook_text, cta_text, description, telemetry = await script_director_agent.craft_screenplay(
+            worker=worker,
             trend_title=trend_title,
-            hook_text=hook_text,
-            body_points=body_points,
-            cta_text=cta_text,
-            description=description,
-            source_trend_id=source_trend_id,
+            trend_summary=trend_summary,
+            llm=active_llm,
         )
 
+        blueprint_id = f"vbp-{uuid.uuid4().hex[:12]}"
+        total_duration = sum(s.duration_seconds for s in scenes)
+        hook_variants = generate_hook_variants(trend_title, worker.audience)
+
+        # Thumbnail spec
+        thumbnail_words = trend_title.split()
+        thumbnail = ThumbnailSpec(
+            headline_text=" ".join(thumbnail_words[:5]).upper() if len(thumbnail_words) >= 5 else trend_title[:40].upper(),
+            subtext=f"by {brand.brand_name}",
+            emotion="shock" if "wrong" in hook_text.lower() or "cost" in hook_text.lower() else "curiosity",
+            layout="split_diagonal",
+            background_image_keywords=scenes[0].visual.search_keywords if scenes else extract_visual_keywords(trend_title, fallback_niche=worker_id, max_keywords=3),
+            arrow_or_circle=True,
+        )
+
+        # Captions
+        captions = CaptionConfig(
+            style="word_highlight",
+            highlight_color=brand.colors.caption_highlight,
+            base_color=brand.colors.text_primary,
+            font_size=brand.typography.caption_size,
+            animation="pop",
+        )
+
+        # Multi-format export
+        export = MultiFormatExport(
+            primary=ExportFormat(aspect_ratio="9:16", resolution="1080x1920"),
+            square=ExportFormat(aspect_ratio="1:1", resolution="1080x1080"),
+            landscape=None,
+        )
+
+        blueprint = VideoProductionBlueprint(
+            blueprint_id=blueprint_id,
+            worker_id=worker_id,
+            source_trend_id=source_trend_id,
+            title=trend_title,
+            description=description,
+            scenes=scenes,
+            total_duration_seconds=total_duration,
+            brand=brand,
+            captions=captions,
+            hook_variants=hook_variants,
+            selected_hook_variant=hook_variants[0].variant_id if hook_variants else "hook-contrarian",
+            thumbnail=thumbnail,
+            export=export,
+            virality_score=None,
+            telemetry=telemetry,
+            hashtags=self._generate_hashtags(worker, trend_title),
+            target_platforms=["youtube_shorts", "instagram_reels", "tiktok"],
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        blueprint.virality_score = score_virality(blueprint)
+
         logger.info(
-            "Blueprint '%s' generated for %s | Scenes: %d | Duration: %.1fs | Virality: %d/100 | Recommendation: %s",
+            "Blueprint '%s' generated for %s | Scenes: %d | Duration: %.1fs | Mode: %s | Virality: %d/100",
             blueprint.blueprint_id,
             blueprint.brand.brand_name,
             len(blueprint.scenes),
             blueprint.total_duration_seconds,
+            telemetry.engine_mode,
             blueprint.virality_score.overall_score if blueprint.virality_score else 0,
-            blueprint.virality_score.recommendation if blueprint.virality_score else "unknown",
         )
 
         return blueprint

@@ -1,0 +1,441 @@
+{
+  "blueprint_id": "vbp-1b0f2550b3a1",
+  "worker_id": "business",
+  "source_trend_id": "gt-73099",
+  "title": "luka doncic comments dirk nowitzki",
+  "description": "Google Search search volume spike (1000+)",
+  "scenes": [
+    {
+      "scene_id": "s01-hook",
+      "emotional_beat": "hook",
+      "retention_zone": "critical",
+      "duration_seconds": 3.8,
+      "visual": {
+        "description": "Exclusive backstage door opening to reveal insider operation in luka.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "luka confidential",
+          "luxury private lounge",
+          "secret laboratory door"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "high_contrast"
+      },
+      "audio": {
+        "voiceover_text": "The top 1% in Business and startups know something about luka doncic comments dirk nowitzki that they aren't sharing.",
+        "voiceover_emphasis": [
+          "The",
+          "top"
+        ],
+        "voice_tone": "urgent",
+        "sfx_cue": "impact",
+        "music_energy": "peak",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "glitch",
+      "pacing_note": "Scene 1 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s02-tension",
+      "emotional_beat": "tension",
+      "retention_zone": "build",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "High-stakes investment presentation showing capital allocation into Business and startups.",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "Business and startups capital",
+          "venture capital pitch deck",
+          "silicon valley boardroom"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_left",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "While public headlines focus on consumer features, private equity is pouring millions into the infrastructure layer.",
+        "voiceover_emphasis": [
+          "While",
+          "public"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "suspense_sting",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 2 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s03-revelation",
+      "emotional_beat": "revelation",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Flow of transactions passing through a central high-speed digital hub.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "luka gateway",
+          "high frequency trading stream",
+          "blockchain digital transaction"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "They discovered that owning this specific bottleneck creates an automated tollbooth on the entire industry.",
+        "voiceover_emphasis": [
+          "They",
+          "discovered"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "reveal_chime",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 3 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s04-escalation",
+      "emotional_beat": "escalation",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Cash flow animation accumulating into private treasury account.",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "Business and startups revenue",
+          "passive income metrics",
+          "golden currency particle stream"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_right",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "Every time another company launches in this space, these infrastructure owners take a direct cut.",
+        "voiceover_emphasis": [
+          "Every",
+          "time"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "whoosh",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 4 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s05-twist",
+      "emotional_beat": "twist",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Strategic chess board showing key queen move toward victory.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "luka strategy",
+          "crystal chess piece move",
+          "strategic mastermind concept"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_out",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "You don't need millions to capitalize on this — you just need to position where the capital is flowing next.",
+        "voiceover_emphasis": [
+          "You",
+          "don't"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": null,
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 5 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s06-payoff",
+      "emotional_beat": "payoff",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Dramatic hourglass running out of sand against modern glass clock tower.",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "Business and startups deadline",
+          "luxury mechanical watch movement",
+          "countdown timer digital"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "The window to secure your position before institutional money closes it is less than six months.",
+        "voiceover_emphasis": [
+          "The",
+          "window"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "impact",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 6 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s07-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Grand architectural marvel under blue hour sky symbolizing lasting power.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "luka empire",
+          "modern architectural monument",
+          "majestic panoramic view"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "ken_burns",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "Understand the game being played, and you turn market volatility into permanent leverage.",
+        "voiceover_emphasis": [
+          "Understand",
+          "the"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "reveal_chime",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 7 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s08-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Minimalist brand outro card with follow notification trigger.",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "Business and startups intelligence",
+          "clean dark ui card",
+          "amber gold branding"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "Follow for weekly insider breakdowns on Business and startups and where smart money is moving next.",
+        "voiceover_emphasis": [
+          "Follow",
+          "for"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "whoosh",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 8 cadence locked. Maintain speech rhythm without pause."
+    }
+  ],
+  "total_duration_seconds": 33.2,
+  "brand": {
+    "worker_id": "business",
+    "brand_name": "Founder Brief",
+    "logo_path": null,
+    "watermark_position": "bottom_right",
+    "watermark_opacity": 0.3,
+    "colors": {
+      "primary": "#f5a623",
+      "secondary": "#1a1a2e",
+      "accent": "#10b981",
+      "text_primary": "#ffffff",
+      "text_secondary": "#a0a0a0",
+      "caption_highlight": "#f5a623",
+      "caption_background": "rgba(0,0,0,0.7)"
+    },
+    "typography": {
+      "heading_font": "Montserrat-Bold",
+      "body_font": "Inter-Regular",
+      "caption_font": "Inter-Bold",
+      "caption_size": 48
+    },
+    "intro_template": null,
+    "outro_template": null,
+    "default_voice": "en-US-ChristopherNeural",
+    "voice_speed": 1.05
+  },
+  "captions": {
+    "style": "word_highlight",
+    "position": "bottom_center",
+    "max_words_per_line": 5,
+    "highlight_color": "#f5a623",
+    "base_color": "#ffffff",
+    "shadow_color": "#000000",
+    "font_size": 48,
+    "stroke_width": 3,
+    "animation": "pop"
+  },
+  "hook_variants": [
+    {
+      "variant_id": "hook-contrarian",
+      "variant_label": "Contrarian Warning",
+      "hook_text": "Everyone is wrong about luka doncic comments dirk nowitzki. Here's the proof.",
+      "hook_visual_description": "Red warning text flash with camera shake effect",
+      "predicted_retention_3s": 0.72,
+      "hook_archetype": "contrarian"
+    },
+    {
+      "variant_id": "hook-curiosity",
+      "variant_label": "Curiosity Gap",
+      "hook_text": "I spent 48 hours testing luka doncic comments dirk nowitzki and what I found changes everything.",
+      "hook_visual_description": "Personal POV shot transitioning to evidence montage",
+      "predicted_retention_3s": 0.68,
+      "hook_archetype": "curiosity_gap"
+    },
+    {
+      "variant_id": "hook-stat-shock",
+      "variant_label": "Statistical Shock",
+      "hook_text": "97% of people don't know this about luka doncic comments dirk nowitzki. Number 3 will surprise you.",
+      "hook_visual_description": "Large animated percentage counter with dramatic reveal",
+      "predicted_retention_3s": 0.65,
+      "hook_archetype": "stat_paradox"
+    }
+  ],
+  "selected_hook_variant": "hook-contrarian",
+  "thumbnail": {
+    "headline_text": "LUKA DONCIC COMMENTS DIRK NOWITZKI",
+    "subtext": "by Founder Brief",
+    "emotion": "curiosity",
+    "layout": "split_diagonal",
+    "background_image_keywords": [
+      "luka confidential",
+      "luxury private lounge",
+      "secret laboratory door"
+    ],
+    "use_brand_colors": true,
+    "face_overlay": false,
+    "arrow_or_circle": true
+  },
+  "export": {
+    "primary": {
+      "aspect_ratio": "9:16",
+      "resolution": "1080x1920",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "square": {
+      "aspect_ratio": "1:1",
+      "resolution": "1080x1080",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "landscape": null
+  },
+  "virality_score": {
+    "overall_score": 89,
+    "hook_strength": 90,
+    "pacing_quality": 100,
+    "visual_variety": 74,
+    "audio_energy": 100,
+    "cta_clarity": 85,
+    "shareability": 90,
+    "risk_flags": [
+      "Hook exceeds 3-second critical retention window"
+    ],
+    "recommendation": "publish"
+  },
+  "telemetry": {
+    "engine_mode": "agentic_nlp_synthesizer",
+    "model_name": "llama3.1",
+    "research_latency_seconds": 20.34,
+    "screenplay_archetype": "myth_buster",
+    "llm_connected": false,
+    "llm_error_reason": "Ollama returned incomplete or invalid JSON schema",
+    "target_audience": "Founders, operators, and aspiring entrepreneurs",
+    "angle_discovered": "myth_buster",
+    "event_trace": [
+      {
+        "timestamp": "11:36:01.327",
+        "phase": "RESEARCH",
+        "message": "Analyzing trend entities & viral hooks for topic: 'luka doncic comments dirk nowitzki' (Brand: Founder Brief)"
+      },
+      {
+        "timestamp": "11:36:01.327",
+        "phase": "RESEARCH",
+        "message": "Identified primary entity: 'luka' | Core topic: 'luka doncic comments dirk'"
+      },
+      {
+        "timestamp": "11:36:01.327",
+        "phase": "STRATEGY",
+        "message": "Selected screenplay archetype: 'myth_buster' targeting Founders, operators, and aspiring entrepreneurs"
+      },
+      {
+        "timestamp": "11:36:01.327",
+        "phase": "LLM_DISPATCH",
+        "message": "Dispatching prompt to Ollama model 'llama3.1' (concurrency guarded)"
+      },
+      {
+        "timestamp": "11:36:21.665",
+        "phase": "LLM_WARNING",
+        "message": "Ollama output invalid; engaging dynamic NLP synthesizer"
+      },
+      {
+        "timestamp": "11:36:21.665",
+        "phase": "NLP_SYNTHESIZER",
+        "message": "Synthesizing unique 8-scene screenplay using archetype 'myth_buster'"
+      },
+      {
+        "timestamp": "11:36:21.665",
+        "phase": "FINALIZED",
+        "message": "Crafted 8 bespoke scenes | Total agent latency: 20.34s | Mode: agentic_nlp_synthesizer"
+      }
+    ]
+  },
+  "hashtags": [
+    "#shorts",
+    "#viral",
+    "#businessandstartups",
+    "#luka",
+    "#doncic",
+    "#comments",
+    "#dirk"
+  ],
+  "target_platforms": [
+    "youtube_shorts",
+    "instagram_reels",
+    "tiktok"
+  ],
+  "monetization_links": [],
+  "created_at": "2026-11-07T11:36:21.665910+00:00"
+}

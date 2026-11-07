@@ -1,0 +1,440 @@
+{
+  "blueprint_id": "vbp-824fd74fb376",
+  "worker_id": "business",
+  "source_trend_id": "gt-15996",
+  "title": "málaga - racing de santander",
+  "description": "Google Search search volume spike (200+)",
+  "scenes": [
+    {
+      "scene_id": "s01-hook",
+      "emotional_beat": "hook",
+      "retention_zone": "critical",
+      "duration_seconds": 3.8,
+      "visual": {
+        "description": "Intense visual shockwave revealing málaga - racing de santander.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "málaga discovery",
+          "quantum leap technology",
+          "breaking news studio"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "high_contrast"
+      },
+      "audio": {
+        "voiceover_text": "The biggest leap in Business and startups just happened, and almost nobody noticed.",
+        "voiceover_emphasis": [
+          "The",
+          "biggest"
+        ],
+        "voice_tone": "urgent",
+        "sfx_cue": "impact",
+        "music_energy": "peak",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "glitch",
+      "pacing_note": "Scene 1 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s02-tension",
+      "emotional_beat": "tension",
+      "retention_zone": "build",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Futuristic laboratory or design studio pushing málaga to limits.",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "málaga innovation",
+          "advanced laboratory science",
+          "supercomputer racks"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_left",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "We just crossed a critical performance threshold that experts predicted was still five to ten years away.",
+        "voiceover_emphasis": [
+          "We",
+          "just"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "suspense_sting",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 2 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s03-revelation",
+      "emotional_beat": "revelation",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Time-lapse comparison showing rapid automated generation in Business and startups.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "Business and startups automation",
+          "artificial intelligence code",
+          "robotic precision arm"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "What used to take months of painstaking manual effort is now being solved in micro-seconds.",
+        "voiceover_emphasis": [
+          "What",
+          "used"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "reveal_chime",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 3 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s04-escalation",
+      "emotional_beat": "escalation",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Financial visualization displaying radical cost reduction and output surge.",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "málaga economics",
+          "cryptocurrency trading dashboard",
+          "modern venture capitalist"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "pan_right",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "This isn't an incremental update — it fundamentally rewires the economics of how Founders, operators, and aspiring entrepreneurs build.",
+        "voiceover_emphasis": [
+          "This",
+          "isn't"
+        ],
+        "voice_tone": "serious",
+        "sfx_cue": "whoosh",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 4 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s05-twist",
+      "emotional_beat": "twist",
+      "retention_zone": "core",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Case study evidence showing real results from deploying málaga - racing de santander.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "málaga success",
+          "high growth startup office",
+          "digital screen analytics"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_out",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "Early adopters are already seeing a ten-fold multiplier on their output while costs plummet.",
+        "voiceover_emphasis": [
+          "Early",
+          "adopters"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": null,
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 5 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s06-payoff",
+      "emotional_beat": "payoff",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Diverging split screen showing fast innovators pulling away from slow legacy brands.",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "Business and startups division",
+          "fast moving traffic blur",
+          "modern high speed train"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "The gap between those leveraging this and those ignoring it is widening at record pace.",
+        "voiceover_emphasis": [
+          "The",
+          "gap"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "impact",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 6 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s07-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Glorious sunrise over futuristic city with triumphant musical beat.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "málaga dawn",
+          "modern architectural summit",
+          "golden hour skyscrapers"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "ken_burns",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "This is your chance to get positioned before this becomes common industry knowledge.",
+        "voiceover_emphasis": [
+          "This",
+          "is"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "reveal_chime",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Scene 7 cadence locked. Maintain speech rhythm without pause."
+    },
+    {
+      "scene_id": "s08-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 4.2,
+      "visual": {
+        "description": "Polished brand identity closing animation with call to action.",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "Business and startups channel",
+          "social media verified badge",
+          "dark luxury glow"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "cool"
+      },
+      "audio": {
+        "voiceover_text": "Follow @FounderBrief for daily frontline breakdowns before everyone else.",
+        "voiceover_emphasis": [
+          "Follow",
+          "@FounderBrief"
+        ],
+        "voice_tone": "excited",
+        "sfx_cue": "whoosh",
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Scene 8 cadence locked. Maintain speech rhythm without pause."
+    }
+  ],
+  "total_duration_seconds": 33.2,
+  "brand": {
+    "worker_id": "business",
+    "brand_name": "Founder Brief",
+    "logo_path": null,
+    "watermark_position": "bottom_right",
+    "watermark_opacity": 0.3,
+    "colors": {
+      "primary": "#f5a623",
+      "secondary": "#1a1a2e",
+      "accent": "#10b981",
+      "text_primary": "#ffffff",
+      "text_secondary": "#a0a0a0",
+      "caption_highlight": "#f5a623",
+      "caption_background": "rgba(0,0,0,0.7)"
+    },
+    "typography": {
+      "heading_font": "Montserrat-Bold",
+      "body_font": "Inter-Regular",
+      "caption_font": "Inter-Bold",
+      "caption_size": 48
+    },
+    "intro_template": null,
+    "outro_template": null,
+    "default_voice": "en-US-ChristopherNeural",
+    "voice_speed": 1.05
+  },
+  "captions": {
+    "style": "word_highlight",
+    "position": "bottom_center",
+    "max_words_per_line": 5,
+    "highlight_color": "#f5a623",
+    "base_color": "#ffffff",
+    "shadow_color": "#000000",
+    "font_size": 48,
+    "stroke_width": 3,
+    "animation": "pop"
+  },
+  "hook_variants": [
+    {
+      "variant_id": "hook-contrarian",
+      "variant_label": "Contrarian Warning",
+      "hook_text": "Everyone is wrong about málaga - racing de santander. Here's the proof.",
+      "hook_visual_description": "Red warning text flash with camera shake effect",
+      "predicted_retention_3s": 0.72,
+      "hook_archetype": "contrarian"
+    },
+    {
+      "variant_id": "hook-curiosity",
+      "variant_label": "Curiosity Gap",
+      "hook_text": "I spent 48 hours testing málaga - racing de santander and what I found changes everything.",
+      "hook_visual_description": "Personal POV shot transitioning to evidence montage",
+      "predicted_retention_3s": 0.68,
+      "hook_archetype": "curiosity_gap"
+    },
+    {
+      "variant_id": "hook-stat-shock",
+      "variant_label": "Statistical Shock",
+      "hook_text": "97% of people don't know this about málaga - racing de santander. Number 3 will surprise you.",
+      "hook_visual_description": "Large animated percentage counter with dramatic reveal",
+      "predicted_retention_3s": 0.65,
+      "hook_archetype": "stat_paradox"
+    }
+  ],
+  "selected_hook_variant": "hook-contrarian",
+  "thumbnail": {
+    "headline_text": "MÁLAGA - RACING DE SANTANDER",
+    "subtext": "by Founder Brief",
+    "emotion": "curiosity",
+    "layout": "split_diagonal",
+    "background_image_keywords": [
+      "málaga discovery",
+      "quantum leap technology",
+      "breaking news studio"
+    ],
+    "use_brand_colors": true,
+    "face_overlay": false,
+    "arrow_or_circle": true
+  },
+  "export": {
+    "primary": {
+      "aspect_ratio": "9:16",
+      "resolution": "1080x1920",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "square": {
+      "aspect_ratio": "1:1",
+      "resolution": "1080x1080",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "landscape": null
+  },
+  "virality_score": {
+    "overall_score": 89,
+    "hook_strength": 90,
+    "pacing_quality": 100,
+    "visual_variety": 74,
+    "audio_energy": 100,
+    "cta_clarity": 85,
+    "shareability": 90,
+    "risk_flags": [
+      "Hook exceeds 3-second critical retention window"
+    ],
+    "recommendation": "publish"
+  },
+  "telemetry": {
+    "engine_mode": "agentic_nlp_synthesizer",
+    "model_name": "llama3.1",
+    "research_latency_seconds": 22.01,
+    "screenplay_archetype": "exponential_breakthrough",
+    "llm_connected": false,
+    "llm_error_reason": "Ollama generation timed out after 22s (model cold or high queue depth)",
+    "target_audience": "Founders, operators, and aspiring entrepreneurs",
+    "angle_discovered": "exponential_breakthrough",
+    "event_trace": [
+      {
+        "timestamp": "12:45:11.544",
+        "phase": "RESEARCH",
+        "message": "Analyzing trend entities & viral hooks for topic: 'málaga - racing de santander' (Brand: Founder Brief)"
+      },
+      {
+        "timestamp": "12:45:11.544",
+        "phase": "RESEARCH",
+        "message": "Identified primary entity: 'málaga' | Core topic: 'málaga racing santander'"
+      },
+      {
+        "timestamp": "12:45:11.544",
+        "phase": "STRATEGY",
+        "message": "Selected screenplay archetype: 'exponential_breakthrough' targeting Founders, operators, and aspiring entrepreneurs"
+      },
+      {
+        "timestamp": "12:45:11.544",
+        "phase": "LLM_DISPATCH",
+        "message": "Dispatching prompt to Ollama model 'llama3.1' (concurrency guarded)"
+      },
+      {
+        "timestamp": "12:45:33.550",
+        "phase": "LLM_TIMEOUT",
+        "message": "Ollama generation timed out after 22s (model cold or high queue depth)"
+      },
+      {
+        "timestamp": "12:45:33.551",
+        "phase": "NLP_SYNTHESIZER",
+        "message": "Synthesizing unique 8-scene screenplay using archetype 'exponential_breakthrough'"
+      },
+      {
+        "timestamp": "12:45:33.552",
+        "phase": "FINALIZED",
+        "message": "Crafted 8 bespoke scenes | Total agent latency: 22.01s | Mode: agentic_nlp_synthesizer"
+      }
+    ]
+  },
+  "hashtags": [
+    "#shorts",
+    "#viral",
+    "#businessandstartups",
+    "#málaga",
+    "#racing",
+    "#santander"
+  ],
+  "target_platforms": [
+    "youtube_shorts",
+    "instagram_reels",
+    "tiktok"
+  ],
+  "monetization_links": [],
+  "created_at": "2026-11-07T12:45:33.552255+00:00"
+}

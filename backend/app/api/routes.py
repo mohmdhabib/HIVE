@@ -9,7 +9,14 @@ from app.schemas.audit import AuditLogEntry
 from app.schemas.content import TopicOpportunity, MultiFormatDeliverable
 from app.schemas.platform import PlatformType, AccountConnection, ScheduledPublication
 from app.schemas.revenue import RevenueEvent, CostEvent, WorkerProfitability, FinancialSummary, RevenueStream, AttributionType, CostType
-from app.schemas.trend import LiveTrendItem, TrendAnalysisRequest, NicheTrendDigest
+from app.schemas.trend import (
+    LiveTrendItem,
+    TrendAnalysisRequest,
+    NicheTrendDigest,
+    BatchHarvestRequest,
+    BatchHarvestReport,
+    HarvesterScheduleConfig,
+)
 from app.schemas.video import (
     VideoProductionBlueprint,
     ViralityScorecard,
@@ -34,6 +41,7 @@ from app.services.publishing_service import publishing_service
 from app.services.revenue_service import revenue_service
 from app.services.system_monitor import system_monitor
 from app.services.trend_research import trend_research_service
+from app.services.trend_harvester import trend_harvester_service
 from app.services.video_engine import video_engine
 from app.services.video_renderer import video_renderer
 from app.services.material_service import material_service
@@ -293,6 +301,17 @@ async def get_video_blueprint_endpoint(blueprint_id: str):
         raise HTTPException(status_code=404, detail=f"Blueprint '{blueprint_id}' not found")
     return bp
 
+@router.post("/video/blueprint/{blueprint_id}/render", response_model=RenderJobStatus)
+async def render_blueprint_by_id_endpoint(blueprint_id: str):
+    bp = video_renderer.get_or_load_blueprint(blueprint_id)
+    if not bp:
+        raise HTTPException(status_code=404, detail=f"Blueprint '{blueprint_id}' not found")
+    try:
+        return video_renderer.start_background_render(bp)
+    except Exception as exc:
+        logger.exception("Error initiating background render for blueprint %s", blueprint_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+
 @router.post("/video/blueprint/{blueprint_id}/scene/reorder", response_model=RenderJobStatus)
 async def reorder_scenes_endpoint(blueprint_id: str, req: SceneReorderRequest):
     try:
@@ -473,6 +492,38 @@ async def analyze_live_trends(
     except Exception as exc:
         logger.exception("Error analyzing live trends")
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.post("/trends/harvest-batch", response_model=BatchHarvestReport)
+async def run_batch_harvest_endpoint(
+    req: BatchHarvestRequest = BatchHarvestRequest(),
+    llm: LLMService = Depends(get_llm_service),
+):
+    try:
+        return await trend_harvester_service.run_batch_harvest(
+            worker_ids=req.worker_ids,
+            drafts_per_worker=req.drafts_per_worker,
+            llm=llm,
+        )
+    except Exception as exc:
+        logger.exception("Error executing batch trend harvest")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/trends/harvest-batch/status")
+async def get_batch_harvest_status():
+    return trend_harvester_service.get_status()
+
+class UpdateScheduleRequest(BaseModel):
+    enabled: bool = True
+    cron_expression: str = "0 6 * * *"
+    drafts_per_worker: int = 3
+
+@router.post("/trends/harvest-batch/schedule", response_model=HarvesterScheduleConfig)
+async def update_batch_harvest_schedule(req: UpdateScheduleRequest):
+    return trend_harvester_service.update_schedule(
+        enabled=req.enabled,
+        cron_expression=req.cron_expression,
+        drafts_per_worker=req.drafts_per_worker,
+    )
 
 # ============================================================================
 # CONTENT PRODUCTION STUDIO (MILESTONE 4)

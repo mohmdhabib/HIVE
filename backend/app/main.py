@@ -1,4 +1,5 @@
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,13 +7,21 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import router
 from app.config import get_settings
 from app.core.logging import setup_logging
+from app.services.trend_harvester import trend_harvester_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger = setup_logging()
     settings = get_settings()
     logger.info("HIVE API starting (version=%s, model=%s)", settings.app_version, settings.ollama_model)
+    stop_event = asyncio.Event()
+    scheduler_task = asyncio.create_task(trend_harvester_service.start_scheduler_loop(stop_event))
     yield
+    stop_event.set()
+    try:
+        await asyncio.wait_for(scheduler_task, timeout=2.0)
+    except Exception:
+        pass
     logger.info("HIVE API shutting down")
 
 settings = get_settings()

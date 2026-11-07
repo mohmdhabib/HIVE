@@ -52,7 +52,7 @@ class MaterialService:
         access_key: Optional[str] = None,
         orientation: str = "portrait",
     ) -> Optional[str]:
-        """Queries the Unsplash API for real, ultra-high-definition vertical photography matching keywords."""
+        """Queries the Unsplash API for real, ultra-high-definition vertical photography matching keywords with intelligent query relaxation."""
         key = access_key or os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
         if not key:
             try:
@@ -64,38 +64,55 @@ class MaterialService:
         if not key or not keywords:
             return None
 
-        # Clean and join keywords
-        clean_kw = [k.replace('"', '').replace("'", '').strip() for k in keywords if len(k) > 1]
-        query = urllib.parse.quote(" ".join(clean_kw[:4]))
-        url = f"https://api.unsplash.com/search/photos?query={query}&orientation={orientation}&per_page=4"
+        # Clean keywords: strip #, quotes, brackets
+        clean_kw = [k.replace('"', '').replace("'", '').replace("#", "").strip() for k in keywords if len(k.strip()) > 1]
+        if not clean_kw:
+            return None
 
-        try:
-            req = urllib.request.Request(
-                url,
-                headers={"Authorization": f"Client-ID {key}", "User-Agent": "HIVE-VideoEngine/2.0"}
-            )
-            with urllib.request.urlopen(req, timeout=4.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                results = data.get("results", [])
-                if not results:
-                    return None
+        # Build candidate queries: specific visual phrases first, then core entity, then single visual words
+        candidates: List[str] = []
+        if len(clean_kw) >= 2:
+            candidates.append(clean_kw[1])
+        if len(clean_kw) >= 3:
+            candidates.append(clean_kw[2])
+        if len(clean_kw) >= 1:
+            candidates.append(clean_kw[0])
+        # Two-word pair
+        if len(clean_kw) >= 2:
+            candidates.append(f"{clean_kw[0]} {clean_kw[1]}")
+        # Single punchy words
+        for kw in clean_kw:
+            for w in kw.split():
+                if len(w) > 3 and w.lower() not in [c.lower() for c in candidates]:
+                    candidates.append(w)
 
-                first_photo = results[0]
-                urls = first_photo.get("urls", {})
-                img_url = urls.get("regular") or urls.get("full") or urls.get("small")
-                if img_url:
-                    photo_id = first_photo.get("id", "photo")
-                    dest_path = os.path.join(self.downloads_dir, f"unsplash_{photo_id}.jpg")
-                    if not os.path.exists(dest_path):
-                        logger.info("Downloading real Unsplash photo: %s", first_photo.get("id"))
-                        dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-VideoEngine/2.0"})
-                        with urllib.request.urlopen(dl_req, timeout=6.0) as dl_resp:
-                            with open(dest_path, "wb") as f:
-                                f.write(dl_resp.read())
-                    return dest_path
-
-        except Exception as e:
-            logger.debug("Unsplash fetch skipped or unavailable: %s", e)
+        for candidate in candidates[:4]:
+            try:
+                query = urllib.parse.quote(candidate)
+                url = f"https://api.unsplash.com/search/photos?query={query}&orientation={orientation}&per_page=4"
+                req = urllib.request.Request(
+                    url,
+                    headers={"Authorization": f"Client-ID {key}", "User-Agent": "HIVE-VideoEngine/2.0"}
+                )
+                with urllib.request.urlopen(req, timeout=3.5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    results = data.get("results", [])
+                    if results:
+                        first_photo = results[0]
+                        urls = first_photo.get("urls", {})
+                        img_url = urls.get("regular") or urls.get("full") or urls.get("small")
+                        if img_url:
+                            photo_id = first_photo.get("id", "photo")
+                            dest_path = os.path.join(self.downloads_dir, f"unsplash_{photo_id}.jpg")
+                            if not os.path.exists(dest_path):
+                                logger.info("Downloading real Unsplash photo for '%s': %s", candidate, photo_id)
+                                dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-VideoEngine/2.0"})
+                                with urllib.request.urlopen(dl_req, timeout=5.0) as dl_resp:
+                                    with open(dest_path, "wb") as f:
+                                        f.write(dl_resp.read())
+                            return dest_path
+            except Exception as e:
+                logger.debug("Unsplash candidate '%s' skipped: %s", candidate, e)
 
         return None
 
@@ -149,33 +166,37 @@ class MaterialService:
         if not keywords:
             return None
 
-        query = " ".join(keywords[:3]).replace('"', '').strip()
-        safe_query = urllib.parse.quote(f"{query} filetype:bitmap")
-        url = (
-            f"https://commons.wikimedia.org/w/api.php?action=query&generator=search"
-            f"&gsrsearch={safe_query}&gsrnamespace=6&gsrlimit=3&prop=imageinfo&iiprop=url|size&format=json"
-        )
+        clean_kw = [k.replace('"', '').replace("'", '').replace("#", "").strip() for k in keywords if len(k.strip()) > 1]
+        if not clean_kw:
+            return None
 
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "HIVE-Agent/1.0 (contact@hive-media.local)"})
-            with urllib.request.urlopen(req, timeout=3.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                pages = data.get("query", {}).get("pages", {})
-                for _, page in pages.items():
-                    ii_list = page.get("imageinfo", [])
-                    if ii_list:
-                        img_url = ii_list[0].get("url")
-                        if img_url and any(img_url.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png")):
-                            fname = f"commons_{abs(hash(img_url)) % 10000000}.jpg"
-                            dest = os.path.join(self.downloads_dir, fname)
-                            if not os.path.exists(dest):
-                                dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-Agent/1.0 (contact@hive-media.local)"})
-                                with urllib.request.urlopen(dl_req, timeout=4.0) as dl_resp:
-                                    with open(dest, "wb") as f:
-                                        f.write(dl_resp.read())
-                            return dest
-        except Exception as e:
-            logger.debug("Wikimedia stock fetch error: %s", e)
+        candidates = [clean_kw[min(1, len(clean_kw)-1)], clean_kw[0]]
+        for candidate in candidates:
+            try:
+                safe_query = urllib.parse.quote(f"{candidate} filetype:bitmap")
+                url = (
+                    f"https://commons.wikimedia.org/w/api.php?action=query&generator=search"
+                    f"&gsrsearch={safe_query}&gsrnamespace=6&gsrlimit=3&prop=imageinfo&iiprop=url|size&format=json"
+                )
+                req = urllib.request.Request(url, headers={"User-Agent": "HIVE-Agent/1.0 (contact@hive-media.local)"})
+                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    pages = data.get("query", {}).get("pages", {})
+                    for _, page in pages.items():
+                        ii_list = page.get("imageinfo", [])
+                        if ii_list:
+                            img_url = ii_list[0].get("url")
+                            if img_url and any(img_url.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png")):
+                                fname = f"commons_{abs(hash(img_url)) % 10000000}.jpg"
+                                dest = os.path.join(self.downloads_dir, fname)
+                                if not os.path.exists(dest):
+                                    dl_req = urllib.request.Request(img_url, headers={"User-Agent": "HIVE-Agent/1.0 (contact@hive-media.local)"})
+                                    with urllib.request.urlopen(dl_req, timeout=4.0) as dl_resp:
+                                        with open(dest, "wb") as f:
+                                            f.write(dl_resp.read())
+                                return dest
+            except Exception as e:
+                logger.debug("Wikimedia stock fetch error for '%s': %s", candidate, e)
 
         return None
 
@@ -237,6 +258,30 @@ class MaterialService:
         camera_motion: str = "",
     ) -> str:
         """Retrieves real stock video, downloads real stock photos with Ken Burns motion, or picks local assets."""
+        res_path, _, _ = self.get_scene_footage_detailed(
+            keywords=keywords,
+            worker_id=worker_id,
+            scene_type=scene_type,
+            duration_sec=duration_sec,
+            output_path=output_path,
+            brand_color=brand_color,
+            scene_idx=scene_idx,
+            camera_motion=camera_motion,
+        )
+        return res_path
+
+    def get_scene_footage_detailed(
+        self,
+        keywords: List[str],
+        worker_id: str,
+        scene_type: str,
+        duration_sec: float,
+        output_path: str,
+        brand_color: str = "#00d4ff",
+        scene_idx: int = 0,
+        camera_motion: str = "",
+    ) -> Tuple[str, str, str]:
+        """Retrieves footage and returns (output_path, source_type, source_description) for full observability."""
         ffmpeg_bin = get_ffmpeg_binary()
 
         # Motion cadence: alternates across scenes for dynamic retention flow
@@ -252,7 +297,7 @@ class MaterialService:
                 if vault_match.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
                     if self.convert_image_to_motion_video(vault_match, duration_sec, output_path, motion_type=effective_motion):
                         logger.info("Using vault image with %s motion: %s", effective_motion, vault_match)
-                        return output_path
+                        return output_path, "Media Vault", os.path.basename(vault_match)
                 else:
                     cmd = [
                         ffmpeg_bin, "-y",
@@ -267,7 +312,7 @@ class MaterialService:
                     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                     if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
                         logger.info("Using pre-harvested vault footage: %s", vault_match)
-                        return output_path
+                        return output_path, "Media Vault", os.path.basename(vault_match)
         except Exception as e:
             logger.debug("Vault lookup skipped: %s", e)
 
@@ -276,7 +321,7 @@ class MaterialService:
         if unsplash_img and os.path.exists(unsplash_img):
             if self.convert_image_to_motion_video(unsplash_img, duration_sec, output_path, motion_type=effective_motion):
                 logger.info("Using real Unsplash HD stock photo with %s motion: %s", effective_motion, unsplash_img)
-                return output_path
+                return output_path, "Unsplash 4K (Ken Burns)", os.path.basename(unsplash_img)
 
         # Tier 2: Real Pexels Stock Video API
         stock_path = self.fetch_pexels_stock_video(keywords=keywords, duration_needed=duration_sec)
@@ -295,7 +340,7 @@ class MaterialService:
                 subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
                     logger.info("Using real Pexels stock video: %s", stock_path)
-                    return output_path
+                    return output_path, "Pexels Stock Video", os.path.basename(stock_path)
             except Exception as e:
                 logger.debug("Failed trimming stock footage: %s", e)
 
@@ -304,7 +349,7 @@ class MaterialService:
         if commons_img and os.path.exists(commons_img):
             if self.convert_image_to_motion_video(commons_img, duration_sec, output_path, motion_type=effective_motion):
                 logger.info("Using real Wikimedia stock image with %s motion: %s", effective_motion, commons_img)
-                return output_path
+                return output_path, "Wikimedia Commons (Ken Burns)", os.path.basename(commons_img)
 
         # Tier 4: Curated Real Stock Asset Bank (niche-curated photos & videos on disk)
         chosen_asset, asset_type = self.find_best_local_stock_asset(
@@ -321,7 +366,7 @@ class MaterialService:
             if asset_type == "image":
                 if self.convert_image_to_motion_video(asset_path, duration_sec, output_path, motion_type=effective_motion):
                     logger.info("Using curated real stock photo with %s motion: %s", effective_motion, asset_path)
-                    return output_path
+                    return output_path, "Local Stock Asset Bank", chosen_asset
             elif asset_type == "video":
                 try:
                     cmd = [
@@ -337,7 +382,7 @@ class MaterialService:
                     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
                     if os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
                         logger.info("Using curated real stock video: %s", asset_path)
-                        return output_path
+                        return output_path, "Local Stock Asset Bank", chosen_asset
                 except Exception as e:
                     logger.debug("Failed trimming curated video: %s", e)
 
@@ -349,15 +394,16 @@ class MaterialService:
                     if os.path.exists(cand_path) and os.path.getsize(cand_path) > 1000:
                         if self.convert_image_to_motion_video(cand_path, duration_sec, output_path, motion_type=effective_motion):
                             logger.info("Using fallback real stock photo with %s motion: %s", effective_motion, cand_path)
-                            return output_path
+                            return output_path, "Local Fallback Asset", candidate
 
         # Tier 5: Fallback to procedural kinetic motion video
-        return self.generate_procedural_motion_video(
+        res_proc = self.generate_procedural_motion_video(
             scene_type=scene_type,
             duration_sec=duration_sec,
             output_path=output_path,
             brand_color=brand_color,
         )
+        return res_proc, "Procedural Kinetic Neon Motion", f"{scene_type} {brand_color}"
 
     def generate_procedural_motion_video(
         self,
