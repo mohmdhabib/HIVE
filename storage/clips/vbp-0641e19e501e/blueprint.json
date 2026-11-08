@@ -1,0 +1,286 @@
+{
+  "blueprint_id": "vbp-0641e19e501e",
+  "worker_id": "tech",
+  "source_trend_id": null,
+  "title": "Re-roll Test Blueprint",
+  "description": "Verifying visual reroll cycling and custom asset updates.",
+  "scenes": [
+    {
+      "scene_id": "s01-hook",
+      "emotional_beat": "hook",
+      "retention_zone": "critical",
+      "duration_seconds": 2.5,
+      "visual": {
+        "description": "Rapid kinetic text animation of the core claim, zooming into frame",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "roll",
+          "test",
+          "blueprint"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_in",
+        "color_mood": "high_contrast"
+      },
+      "audio": {
+        "voiceover_text": "AI breakthrough test for visual reroll.",
+        "voiceover_emphasis": [
+          "AI",
+          "breakthrough",
+          "test"
+        ],
+        "voice_tone": "urgent",
+        "sfx_cue": "impact",
+        "music_energy": "peak",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "glitch",
+      "pacing_note": "MAXIMUM ENERGY. No dead frames. Text must appear within 0.3s."
+    },
+    {
+      "scene_id": "s02-tension",
+      "emotional_beat": "tension",
+      "retention_zone": "build",
+      "duration_seconds": 3.0,
+      "visual": {
+        "description": "Dramatic b-roll establishing the topic context with subtle camera movement",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "roll",
+          "test",
+          "blueprint"
+        ],
+        "visual_metaphor": "unveiling hidden truth",
+        "camera_motion": "pan_left",
+        "color_mood": "desaturated"
+      },
+      "audio": {
+        "voiceover_text": "And most people have no idea what's actually happening with Re-roll Test Blueprint.",
+        "voiceover_emphasis": [],
+        "voice_tone": "conspiratorial",
+        "sfx_cue": "suspense_sting",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "cut",
+      "pacing_note": "Lower energy but maintain intrigue. Lean into the curiosity gap."
+    },
+    {
+      "scene_id": "s03-core-1",
+      "emotional_beat": "revelation",
+      "retention_zone": "core",
+      "duration_seconds": 4.5,
+      "visual": {
+        "description": "Visual evidence or example illustrating: Scene testing re-roll visual cycling.",
+        "visual_type": "b_roll",
+        "search_keywords": [
+          "scene",
+          "testing",
+          "roll"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_out",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "Scene testing re-roll visual cycling.",
+        "voiceover_emphasis": [],
+        "voice_tone": "excited",
+        "sfx_cue": "reveal_chime",
+        "music_energy": "building",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "word_highlight",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Evidence delivery scene 1. Vary visual type from previous scene."
+    },
+    {
+      "scene_id": "s04-payoff",
+      "emotional_beat": "payoff",
+      "retention_zone": "close",
+      "duration_seconds": 3.5,
+      "visual": {
+        "description": "Satisfying summary visual — chart, transformation, or before/after",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "roll",
+          "test",
+          "blueprint"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "slow_zoom_out",
+        "color_mood": "warm"
+      },
+      "audio": {
+        "voiceover_text": "And that changes everything about how we think about re-roll.",
+        "voiceover_emphasis": [],
+        "voice_tone": "calm",
+        "sfx_cue": null,
+        "music_energy": "drop",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "full_sentence",
+      "transition_in": "fade",
+      "pacing_note": "Breathing room. Let the insight land."
+    },
+    {
+      "scene_id": "s05-cta",
+      "emotional_beat": "cta",
+      "retention_zone": "close",
+      "duration_seconds": 3.0,
+      "visual": {
+        "description": "Brand outro card with follow CTA and next-video tease",
+        "visual_type": "text_overlay",
+        "search_keywords": [
+          "roll",
+          "test",
+          "blueprint"
+        ],
+        "visual_metaphor": null,
+        "camera_motion": "ken_burns",
+        "color_mood": null
+      },
+      "audio": {
+        "voiceover_text": "Subscribe.",
+        "voiceover_emphasis": [],
+        "voice_tone": "excited",
+        "sfx_cue": "notification",
+        "music_energy": "peak",
+        "bgm_track": "cyber_beat"
+      },
+      "caption_style": "minimal",
+      "transition_in": "zoom_transition",
+      "pacing_note": "Energy spike for CTA. Make the follow feel urgent."
+    }
+  ],
+  "total_duration_seconds": 16.5,
+  "brand": {
+    "worker_id": "tech",
+    "brand_name": "Signal Tech",
+    "logo_path": null,
+    "watermark_position": "bottom_right",
+    "watermark_opacity": 0.3,
+    "colors": {
+      "primary": "#00d4ff",
+      "secondary": "#0a0e1a",
+      "accent": "#7c3aed",
+      "text_primary": "#ffffff",
+      "text_secondary": "#a0a0a0",
+      "caption_highlight": "#00d4ff",
+      "caption_background": "rgba(0,0,0,0.7)"
+    },
+    "typography": {
+      "heading_font": "JetBrains Mono Bold",
+      "body_font": "Inter-Regular",
+      "caption_font": "JetBrains Mono Bold",
+      "caption_size": 44
+    },
+    "intro_template": null,
+    "outro_template": null,
+    "default_voice": "en-US-GuyNeural",
+    "voice_speed": 1.08
+  },
+  "captions": {
+    "style": "word_highlight",
+    "position": "bottom_center",
+    "max_words_per_line": 5,
+    "highlight_color": "#00d4ff",
+    "base_color": "#ffffff",
+    "shadow_color": "#000000",
+    "font_size": 44,
+    "stroke_width": 3,
+    "animation": "pop"
+  },
+  "hook_variants": [
+    {
+      "variant_id": "hook-contrarian",
+      "variant_label": "Contrarian Warning",
+      "hook_text": "Everyone is wrong about Re-roll Test Blueprint. Here's the proof.",
+      "hook_visual_description": "Red warning text flash with camera shake effect",
+      "predicted_retention_3s": 0.72,
+      "hook_archetype": "contrarian"
+    },
+    {
+      "variant_id": "hook-curiosity",
+      "variant_label": "Curiosity Gap",
+      "hook_text": "I spent 48 hours testing Re-roll Test Blueprint and what I found changes everything.",
+      "hook_visual_description": "Personal POV shot transitioning to evidence montage",
+      "predicted_retention_3s": 0.68,
+      "hook_archetype": "curiosity_gap"
+    },
+    {
+      "variant_id": "hook-stat-shock",
+      "variant_label": "Statistical Shock",
+      "hook_text": "97% of people don't know this about Re-roll Test Blueprint. Number 3 will surprise you.",
+      "hook_visual_description": "Large animated percentage counter with dramatic reveal",
+      "predicted_retention_3s": 0.65,
+      "hook_archetype": "stat_paradox"
+    }
+  ],
+  "selected_hook_variant": "hook-contrarian",
+  "thumbnail": {
+    "headline_text": "RE-ROLL TEST BLUEPRINT",
+    "subtext": "by Signal Tech",
+    "emotion": "curiosity",
+    "layout": "split_diagonal",
+    "background_image_keywords": [
+      "roll",
+      "test",
+      "blueprint"
+    ],
+    "use_brand_colors": true,
+    "face_overlay": false,
+    "arrow_or_circle": true
+  },
+  "export": {
+    "primary": {
+      "aspect_ratio": "9:16",
+      "resolution": "1080x1920",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "square": {
+      "aspect_ratio": "1:1",
+      "resolution": "1080x1080",
+      "fps": 30,
+      "codec": "libx264",
+      "audio_codec": "aac",
+      "bitrate": "8M",
+      "format": "mp4"
+    },
+    "landscape": null
+  },
+  "virality_score": {
+    "overall_score": 91,
+    "hook_strength": 100,
+    "pacing_quality": 100,
+    "visual_variety": 74,
+    "audio_energy": 100,
+    "cta_clarity": 85,
+    "shareability": 90,
+    "risk_flags": [],
+    "recommendation": "publish"
+  },
+  "telemetry": null,
+  "researched_sources": [],
+  "hashtags": [
+    "#shorts",
+    "#viral",
+    "#aiandtechnology",
+    "#re-roll",
+    "#test",
+    "#blueprint"
+  ],
+  "target_platforms": [
+    "youtube_shorts",
+    "instagram_reels",
+    "tiktok"
+  ],
+  "monetization_links": [],
+  "created_at": "2026-11-07T20:41:35.061170+00:00"
+}
